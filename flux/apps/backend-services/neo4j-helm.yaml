@@ -30,11 +30,11 @@ spec:
       acceptLicenseAgreement: "yes"
       resources:
         requests:
-          cpu: "1"
-          memory: "2Gi"
+          cpu: "200m"
+          memory: "512Mi"
         limits:
-          cpu: "1"
-          memory: "2Gi"
+          cpu: "500m"
+          memory: "1Gi"
     volumes:
       data:
         mode: dynamic

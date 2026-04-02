@@ -117,11 +117,11 @@ spec:
         command: ["/bin/bash", "/project-468/backend-services/entrypoint.sh", "worker"]
         resources:
           limits:
-            cpu: 2
-            memory: 2Gi
+            cpu: 500m
+            memory: 1Gi
           requests:
-            cpu: 1
-            memory: 2Gi
+            cpu: 50m
+            memory: 256Mi
         volumeMounts:
         - name: secrets
           mountPath: /project-468/backend-services/shhh

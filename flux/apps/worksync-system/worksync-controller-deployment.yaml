@@ -75,10 +75,11 @@ spec:
           periodSeconds: 10
         resources:
           limits:
-            memory: 2Gi
-          requests:
-            cpu: 100m
+            cpu: 250m
             memory: 128Mi
+          requests:
+            cpu: 25m
+            memory: 32Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

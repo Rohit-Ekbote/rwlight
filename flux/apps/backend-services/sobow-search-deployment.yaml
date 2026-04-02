@@ -104,11 +104,11 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:
           limits:
-            cpu: 1
+            cpu: 500m
             memory: 512Mi
           requests:
-            cpu: 100m
-            memory: 32Mi
+            cpu: 50m
+            memory: 128Mi
         livenessProbe:
           httpGet:
             path: /livez

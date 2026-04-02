@@ -193,9 +193,12 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           resources:
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
             requests:
-              cpu: "100m"
-              memory: "1Gi"
+              cpu: "50m"
+              memory: "64Mi"
           securityContext:
             capabilities:
               add:

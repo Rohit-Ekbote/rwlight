@@ -38,11 +38,11 @@ spec:
         command: ['sh', '-c', 'python3 /scripts/migration-controller-$${FRAMEWORK:-django}.py']
         resources:
           requests:
-            cpu: 100m
-            memory: 256Mi
+            cpu: 50m
+            memory: 128Mi
           limits:
-            cpu: 1
-            memory: 8Gi
+            cpu: 500m
+            memory: 512Mi
         volumeMounts:
         - name: secrets
           mountPath: /project-468/backend-services/shhh

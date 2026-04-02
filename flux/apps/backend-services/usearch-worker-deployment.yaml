@@ -124,8 +124,8 @@ spec:
             optional: true
         resources:
           requests:
-            memory: "1Gi"
-            cpu: "500m"
+            memory: "512Mi"
+            cpu: "100m"
           limits:
-            memory: "2Gi"
-            cpu: "2000m"
+            memory: "1536Mi"
+            cpu: "500m"
