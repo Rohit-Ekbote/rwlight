@@ -322,9 +322,12 @@ A Lima YAML template (`lima/rwlight.yaml`) that configures:
 
 ### Architecture support
 
-- **Apple Silicon (M1/M2/M3/M4):** ARM64 VM via Apple Virtualization.framework (default, fastest)
-- **Intel Mac:** AMD64 VM via QEMU
-- Platform container images must support the target architecture. If images are AMD64-only, Apple Silicon Macs will need Rosetta emulation (Lima supports this via `rosetta: true`)
+The Lima VM always runs **AMD64 Linux** regardless of host Mac architecture. This avoids any multi-arch image requirements — all container images run as AMD64 inside the VM.
+
+- **Apple Silicon (M1/M2/M3/M4):** AMD64 VM via Rosetta emulation (`arch: x86_64`, `rosetta: enabled`). Rosetta runs AMD64 Linux binaries at near-native speed.
+- **Intel Mac:** AMD64 VM natively via QEMU.
+
+This means no changes to CI/CD pipelines or container image builds are needed.
 
 ### Prerequisites on macOS
 
@@ -335,9 +338,9 @@ A Lima YAML template (`lima/rwlight.yaml`) that configures:
 
 The existing `setup.sh` / `setup-rwdev.sh` scripts remain Linux-focused and do not change. They run inside the Lima VM (or directly on a Linux laptop) as they do today. The only addition is the `rwlight-vm` tool for macOS users.
 
-### Open question: container image architecture
+### Container image architecture
 
-RunWhen platform images need to be available for ARM64 to run natively on Apple Silicon Macs. If images are AMD64-only, Lima can use Rosetta emulation but with a ~20-30% performance penalty. This needs verification.
+RunWhen platform images are AMD64-only. By always running an AMD64 Linux VM in Lima (with Rosetta on Apple Silicon), all images work without modification. No CI/CD changes needed.
 
 ## Repo Changes Required
 
@@ -372,7 +375,7 @@ RunWhen platform images need to be available for ARM64 to run natively on Apple 
 | Mimir monolithic OOM | Low | High | Conservative memory limit (512Mi), monitor with `kubectl top` |
 | Tight memory headroom (~400 Mi) | Medium | Medium | OS typically needs 200-400 Mi. Leaves minimal burst room. If insufficient, bump VM to 10 GB. |
 | usearch-worker memory usage | Medium | Low | Set limit to 1.5Gi. Investigate whether 1,565 Mi usage is expected or a leak. |
-| ARM64 image availability | Unknown | High | If RunWhen images are AMD64-only, Apple Silicon Macs need Rosetta emulation (~20-30% perf hit). Verify image arch support before implementation. |
+| Rosetta emulation overhead on Apple Silicon | Low | Low | Lima VM runs AMD64 via Rosetta which is near-native speed. No multi-arch images needed. |
 | Lima VM networking | Low | Medium | Port forwarding and DNS for `*.local.runwhen.com` may need manual `/etc/hosts` entries on macOS. |
 
 ## Decision: usearch-worker Memory
