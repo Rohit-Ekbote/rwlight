@@ -246,6 +246,99 @@ Many workloads request 5-10x their actual usage. Migration controllers have 8Gi 
 
 Headroom: ~400 Mi for OS overhead and burst. Tight but viable for dev/demo. If insufficient, bump VM to 10 GB.
 
+---
+
+## Change 5: macOS Support via Lima VM
+
+### Rationale
+
+k3s is Linux-only. To support MacBook users (both Intel and Apple Silicon), rwlight needs a way to provision a Linux VM on macOS. This should be a separate tool from the platform setup — clean separation of concerns.
+
+### Design
+
+**Two-phase workflow:**
+
+```
+[macOS only]                    [Linux or Lima VM]
+rwlight-vm create  ──→  VM details (IP, SSH, kubeconfig path)  ──→  setup.sh
+```
+
+On Linux laptops, `rwlight-vm` is not needed — `setup.sh` runs directly on the host.
+
+### `rwlight-vm` CLI tool
+
+A standalone script (`rwlight-vm`) that manages Lima VMs for rwlight. It is only used on macOS.
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `rwlight-vm create` | Create a new Lima VM for rwlight |
+| `rwlight-vm delete` | Delete the rwlight Lima VM |
+| `rwlight-vm status` | Show VM status and connection details |
+| `rwlight-vm ssh` | SSH into the VM |
+| `rwlight-vm start` | Start a stopped VM |
+| `rwlight-vm stop` | Stop the VM |
+
+**`rwlight-vm create` flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--cpus` | 4 | Number of CPU cores |
+| `--memory` | 10 (GiB) | Memory allocation |
+| `--disk` | 80 (GiB) | Disk size |
+| `--name` | rwlight | VM name |
+
+**`rwlight-vm create` output:**
+
+```
+Lima VM 'rwlight' created successfully.
+
+VM Details:
+  Name:       rwlight
+  CPUs:       4
+  Memory:     10 GiB
+  Disk:       80 GiB
+  IP:         192.168.64.5
+  SSH:        limactl shell rwlight
+  OS:         Ubuntu 24.04 (ARM64)
+
+To set up the RunWhen platform:
+  limactl shell rwlight
+  cd /path/to/rwlight
+  ./setup/setup.sh
+```
+
+### Lima VM template
+
+A Lima YAML template (`lima/rwlight.yaml`) that configures:
+
+- **Base image:** Ubuntu 24.04 LTS (ARM64 or AMD64 auto-detected)
+- **Resources:** Configurable CPU/memory/disk (defaults: 4 CPU / 10 GiB / 80 GiB)
+- **Mounts:** Project directory mounted read-write into the VM
+- **Provisioning:** Pre-install Docker (required for k3s setup container)
+- **Port forwarding:** Forward ingress ports (80, 443) from Mac host to VM
+- **DNS:** Configure so that `*.local.runwhen.com` subdomains resolve to the VM IP
+
+### Architecture support
+
+- **Apple Silicon (M1/M2/M3/M4):** ARM64 VM via Apple Virtualization.framework (default, fastest)
+- **Intel Mac:** AMD64 VM via QEMU
+- Platform container images must support the target architecture. If images are AMD64-only, Apple Silicon Macs will need Rosetta emulation (Lima supports this via `rosetta: true`)
+
+### Prerequisites on macOS
+
+- Lima installed (`brew install lima`)
+- Docker not required on the Mac host (Docker runs inside the Lima VM)
+
+### Setup script changes
+
+The existing `setup.sh` / `setup-rwdev.sh` scripts remain Linux-focused and do not change. They run inside the Lima VM (or directly on a Linux laptop) as they do today. The only addition is the `rwlight-vm` tool for macOS users.
+
+### Open question: container image architecture
+
+RunWhen platform images need to be available for ARM64 to run natively on Apple Silicon Macs. If images are AMD64-only, Lima can use Rosetta emulation but with a ~20-30% performance penalty. This needs verification.
+
 ## Repo Changes Required
 
 | Area | Files affected | Nature of change |
@@ -257,10 +350,12 @@ Headroom: ~400 Mi for OS overhead and burst. Tight but viable for dev/demo. If i
 | Ingress replica | `flux/infrastructure/base/` or cluster kustomization | Scale ingress-nginx to 1 replica |
 | Resource right-sizing | All deployment/statefulset manifests across namespaces | Update requests/limits per tables above |
 | Setup defaults | `setup/vars.env` | Add rwlight-specific VM size defaults |
+| macOS VM tool | `rwlight-vm` (new script) | Lima VM lifecycle management for macOS users |
+| Lima template | `lima/rwlight.yaml` (new file) | VM configuration template with resource defaults |
 
 ## What Does NOT Change
 
-- Setup scripts (setup.sh, setup-rwdev.sh, clean-rwdev.sh)
+- Setup scripts (setup.sh, setup-rwdev.sh, clean-rwdev.sh) — run inside Lima VM on Mac, or directly on Linux
 - Terraform modules (Gitea + Vault provisioning)
 - Flux CD bootstrap process
 - Application container images
@@ -277,6 +372,8 @@ Headroom: ~400 Mi for OS overhead and burst. Tight but viable for dev/demo. If i
 | Mimir monolithic OOM | Low | High | Conservative memory limit (512Mi), monitor with `kubectl top` |
 | Tight memory headroom (~400 Mi) | Medium | Medium | OS typically needs 200-400 Mi. Leaves minimal burst room. If insufficient, bump VM to 10 GB. |
 | usearch-worker memory usage | Medium | Low | Set limit to 1.5Gi. Investigate whether 1,565 Mi usage is expected or a leak. |
+| ARM64 image availability | Unknown | High | If RunWhen images are AMD64-only, Apple Silicon Macs need Rosetta emulation (~20-30% perf hit). Verify image arch support before implementation. |
+| Lima VM networking | Low | Medium | Port forwarding and DNS for `*.local.runwhen.com` may need manual `/etc/hosts` entries on macOS. |
 
 ## Decision: usearch-worker Memory
 
