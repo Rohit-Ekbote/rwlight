@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+# rwlight-vm — CLI for managing the rwlight Lima VM on macOS
+# Usage: rwlight-vm <command> [flags]
+#
+# Commands:
+#   create   Create and start the Lima VM
+#   delete   Delete the Lima VM (force)
+#   status   Show VM info and IP address
+#   ssh      Open a shell inside the VM
+#   start    Start a stopped VM
+#   stop     Gracefully stop the VM
+#
+# Create flags:
+#   --name    VM name          (default: rwlight)
+#   --cpus    Number of CPUs   (default: 4)
+#   --memory  Memory in GiB    (default: 10)
+#   --disk    Disk size in GiB (default: 80)
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIMA_TEMPLATE="${SCRIPT_DIR}/lima/rwlight.yaml"
+DEFAULT_VM_NAME="rwlight"
+DEFAULT_CPUS=4
+DEFAULT_MEMORY=10
+DEFAULT_DISK=80
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+info()    { echo "[rwlight-vm] $*"; }
+success() { echo "[rwlight-vm] OK: $*"; }
+error()   { echo "[rwlight-vm] ERROR: $*" >&2; }
+die()     { error "$*"; exit 1; }
+
+usage() {
+  grep '^#' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  exit 0
+}
+
+check_macos() {
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    die "rwlight-vm requires macOS (Darwin). Linux users run setup.sh directly."
+  fi
+}
+
+check_lima() {
+  if ! command -v limactl &>/dev/null; then
+    die "limactl not found. Install Lima with: brew install lima"
+  fi
+}
+
+check_template() {
+  if [[ ! -f "${LIMA_TEMPLATE}" ]]; then
+    die "Lima template not found at: ${LIMA_TEMPLATE}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+cmd_create() {
+  local vm_name="${DEFAULT_VM_NAME}"
+  local cpus="${DEFAULT_CPUS}"
+  local memory="${DEFAULT_MEMORY}"
+  local disk="${DEFAULT_DISK}"
+
+  # Parse flags
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)    vm_name="$2";  shift 2 ;;
+      --cpus)    cpus="$2";     shift 2 ;;
+      --memory)  memory="$2";   shift 2 ;;
+      --disk)    disk="$2";     shift 2 ;;
+      --name=*)  vm_name="${1#*=}"; shift ;;
+      --cpus=*)  cpus="${1#*=}";    shift ;;
+      --memory=*) memory="${1#*=}"; shift ;;
+      --disk=*)  disk="${1#*=}";    shift ;;
+      *) die "Unknown flag: $1. Valid flags: --name, --cpus, --memory, --disk" ;;
+    esac
+  done
+
+  check_template
+
+  info "Creating Lima VM '${vm_name}' (cpus=${cpus}, memory=${memory}GiB, disk=${disk}GiB)..."
+
+  limactl create \
+    --name="${vm_name}" \
+    --cpus="${cpus}" \
+    --memory="${memory}" \
+    --disk="${disk}" \
+    "${LIMA_TEMPLATE}"
+
+  info "Starting VM '${vm_name}'..."
+  limactl start "${vm_name}"
+
+  success "VM '${vm_name}' is running."
+  echo ""
+  echo "  SSH into VM  : rwlight-vm ssh --name=${vm_name}"
+  echo "  Check status : rwlight-vm status --name=${vm_name}"
+  echo "  Stop VM      : rwlight-vm stop --name=${vm_name}"
+  echo "  Delete VM    : rwlight-vm delete --name=${vm_name}"
+}
+
+cmd_delete() {
+  local vm_name="${DEFAULT_VM_NAME}"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)   vm_name="$2"; shift 2 ;;
+      --name=*) vm_name="${1#*=}"; shift ;;
+      *) die "Unknown flag: $1" ;;
+    esac
+  done
+
+  info "Force-deleting VM '${vm_name}'..."
+  limactl delete --force "${vm_name}"
+  success "VM '${vm_name}' deleted."
+}
+
+cmd_status() {
+  local vm_name="${DEFAULT_VM_NAME}"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)   vm_name="$2"; shift 2 ;;
+      --name=*) vm_name="${1#*=}"; shift ;;
+      *) die "Unknown flag: $1" ;;
+    esac
+  done
+
+  info "Status for VM '${vm_name}':"
+  limactl list "${vm_name}" 2>/dev/null || die "VM '${vm_name}' not found."
+
+  # Show IP if running
+  local vm_status
+  vm_status="$(limactl list --format '{{.Status}}' "${vm_name}" 2>/dev/null || true)"
+  if [[ "${vm_status}" == "Running" ]]; then
+    local vm_ip
+    vm_ip="$(limactl shell "${vm_name}" -- hostname -I 2>/dev/null | awk '{print $1}' || true)"
+    if [[ -n "${vm_ip}" ]]; then
+      echo ""
+      echo "  VM IP address: ${vm_ip}"
+    fi
+  fi
+}
+
+cmd_ssh() {
+  local vm_name="${DEFAULT_VM_NAME}"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)   vm_name="$2"; shift 2 ;;
+      --name=*) vm_name="${1#*=}"; shift ;;
+      *) die "Unknown flag: $1" ;;
+    esac
+  done
+
+  info "Opening shell in VM '${vm_name}'..."
+  limactl shell "${vm_name}"
+}
+
+cmd_start() {
+  local vm_name="${DEFAULT_VM_NAME}"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)   vm_name="$2"; shift 2 ;;
+      --name=*) vm_name="${1#*=}"; shift ;;
+      *) die "Unknown flag: $1" ;;
+    esac
+  done
+
+  info "Starting VM '${vm_name}'..."
+  limactl start "${vm_name}"
+  success "VM '${vm_name}' started."
+}
+
+cmd_stop() {
+  local vm_name="${DEFAULT_VM_NAME}"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)   vm_name="$2"; shift 2 ;;
+      --name=*) vm_name="${1#*=}"; shift ;;
+      *) die "Unknown flag: $1" ;;
+    esac
+  done
+
+  info "Stopping VM '${vm_name}'..."
+  limactl stop "${vm_name}"
+  success "VM '${vm_name}' stopped."
+}
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+main() {
+  check_macos
+  check_lima
+
+  local command="${1:-}"
+  shift || true
+
+  case "${command}" in
+    create) cmd_create "$@" ;;
+    delete) cmd_delete "$@" ;;
+    status) cmd_status "$@" ;;
+    ssh)    cmd_ssh    "$@" ;;
+    start)  cmd_start  "$@" ;;
+    stop)   cmd_stop   "$@" ;;
+    help|--help|-h) usage ;;
+    "")  die "No command specified. Run 'rwlight-vm help' for usage." ;;
+    *)   die "Unknown command: '${command}'. Run 'rwlight-vm help' for usage." ;;
+  esac
+}
+
+main "$@"
