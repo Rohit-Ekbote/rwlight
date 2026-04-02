@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-proxy
+  namespace: llm-gateway
+  labels: 
+    app: litellm-proxy
+    code-owner: runwhen
+    codecollection.runwhen.com/app: litellm-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm-proxy
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: litellm-proxy
+      labels:
+        app: litellm-proxy
+        code-owner: runwhen
+        codecollection.runwhen.com/app: litellm-proxy
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - litellm-proxy
+              topologyKey: "kubernetes.io/hostname"
+      serviceAccountName: litellm-proxy-sa
+      initContainers:
+      - name: init-wait-for-db
+        image: busybox:1.28
+        env:
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: litellm-db-pguser-litellm-db
+              key: host
+        command: ["sh", "-c", "until nslookup $DATABASE_HOST; do echo waiting for litellm db; sleep 2; done"]
+      - name: init-wait-for-redis
+        image: busybox:1.28
+        env:
+        - name: REDIS_HOST
+          value: "litellm-redis-master"
+        command: ["sh", "-c", "until nslookup $REDIS_HOST; do echo waiting for redis; sleep 2; done"]
+      containers:
+      - name: litellm-proxy
+        image: ghcr.io/berriai/litellm:v1.81.12-stable
+        imagePullPolicy: Always
+        command: ["litellm", "--host", "0.0.0.0", "--port", "4000", "--config", "/app/proxy_config.yaml", "--num_workers", "1"]
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 250m
+            memory: 256Mi
+        ports:
+        - containerPort: 4000
+          name: http
+        livenessProbe:
+          httpGet:
+            path: /health/liveliness
+            port: 4000
+          initialDelaySeconds: 120
+          periodSeconds: 15
+          successThreshold: 1
+          failureThreshold: 3
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health/readiness
+            port: 4000
+          initialDelaySeconds: 120
+          periodSeconds: 15
+          successThreshold: 1
+          failureThreshold: 3
+          timeoutSeconds: 10
+        volumeMounts:
+          - name: config-volume
+            mountPath: /app
+            readOnly: true
+          - name: secrets
+            mountPath: /app/secrets
+            readOnly: true
+        env:
+        # Production environment variables
+        - name: LITELLM_MODE
+          value: "PRODUCTION"
+        - name: LITELLM_LOG
+          value: "ERROR"
+        - name: DISABLE_SCHEMA_UPDATE
+          value: "False"
+        - name: USE_PRISMA_MIGRATE
+          value: "True"
+        - name: LITELLM_MASTER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: litellm-proxy-secrets
+              key: litellm-master-key
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: litellm-proxy-secrets
+              key: slack-webhook-url
+        # Database configuration
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: litellm-db-pguser-litellm-db
+              key: uri
+        - name: STORE_MODEL_IN_DB
+          value: "True"
+        # Redis configuration
+        - name: REDIS_HOST
+          value: "litellm-redis-master"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: litellm-redis
+              key: redis-password
+        - name: REDIS_NAMESPACE
+          value: "llm-gateway"
+        - name: AWS_ACCESS_KEY_ID
+          value: "${s3_access_key_id}"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "${s3_secret_access_key}"
+      volumes:
+      - name: config-volume
+        configMap:
+          name: litellm-proxy-config
+      - name: secrets
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "vault-litellm-proxy" 

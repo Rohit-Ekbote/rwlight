@@ -1,0 +1,54 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    external-dns.alpha.kubernetes.io/hostname: app.${subdomain}.${domain}.
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+  name: ui
+  namespace: ui
+spec:
+  ingressClassName: "ingress-nginx"
+  rules:
+  - host: app.${subdomain}.${domain}
+    http:
+      paths:
+      - backend:
+          service:
+            name: ui
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - app.${subdomain}.${domain}
+    secretName: ui-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    external-dns.alpha.kubernetes.io/hostname: app-dev.${subdomain}.${domain}.
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+  name: ui-dev
+  namespace: ui
+spec:
+  ingressClassName: "ingress-nginx"
+  rules:
+  - host: app-dev.${subdomain}.${domain}
+    http:
+      paths:
+      - backend:
+          service:
+            name: ui-dev
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - app-dev.${subdomain}.${domain}
+    secretName: ui-dev-tls

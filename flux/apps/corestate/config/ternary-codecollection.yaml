@@ -1,0 +1,14 @@
+apiVersion: runwhen.com/v1
+kind: CodeCollection
+metadata:
+  labels:
+    codecollection: ternary-collection
+  name: ternary-collection
+  namespace: corestate
+spec:
+  developmentBranch: main
+  homepage: https://runwhen.com
+  public: true
+  repoURL: https://github.com/runwhen-contrib/ternary-codecollection.git
+  stable: {}
+  watchAllBranches: true

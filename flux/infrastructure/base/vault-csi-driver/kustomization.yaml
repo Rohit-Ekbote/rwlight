@@ -1,0 +1,4 @@
+namespace: vault
+resources:
+- namespace.yaml
+- csi-driver.yaml

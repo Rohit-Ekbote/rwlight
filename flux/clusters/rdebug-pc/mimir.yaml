@@ -1,0 +1,21 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-mimir
+  namespace: flux-system
+spec:
+  dependsOn: 
+    - name: infrastructure-cert-manager-config
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/mimir
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: platform-cluster-cluster-vars
+      - kind: Secret
+        name: platform-cluster-cluster-vars

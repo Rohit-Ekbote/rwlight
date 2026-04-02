@@ -1,0 +1,211 @@
+## Vault-auth SA is created in terraform, alons with the namespace and some dependent secrets
+# ---
+# apiVersion: v1
+# kind: ServiceAccount
+# metadata:
+#   name: vault-auth
+#   namespace: vault
+# ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-sa
+  namespace: vault
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vault-sa-clusterrole
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-sa-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vault-sa-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: vault-sa
+  namespace: vault
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: vault
+  labels:
+    app: vault
+spec:
+  serviceName: "vault"
+  selector:
+    matchLabels:
+      app: vault
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      serviceAccountName: vault-sa
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - vault
+              topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: kms-init
+          image: amazon/aws-cli:2.28.8
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Fetching existing KMS key from alias..."
+              key_id=$(aws --endpoint-url http://local-kms.vault.svc.cluster.local:8080 \
+                kms describe-key --key-id alias/vault --query 'KeyMetadata.KeyId' --output text)
+              echo "Using KMS Key ID: $key_id"
+              echo "$key_id" > /kms/key-id
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              value: dummy
+            - name: AWS_SECRET_ACCESS_KEY
+              value: dummy
+            - name: AWS_REGION
+              value: us-east-1
+          volumeMounts:
+            - name: kms-key
+              mountPath: /kms
+        - name: config
+          image: busybox
+          env:
+            - name: POD_IP_ADDR
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: s3_endpoint
+              value: ${s3_endpoint}
+            - name: s3_access_key_id
+              value: ${s3_access_key_id}
+            - name: s3_secret_access_key
+              value: ${s3_secret_access_key}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              key_id=$(cat /kms/key-id)
+              cat > /etc/vault/config/vault.hcl <<EOF
+              # service_registration "kubernetes" {}
+              # commented out above because I don't want HA as of now
+              log_level = "warn"
+              ui = true
+
+
+              listener "tcp" {
+                address     = "127.0.0.1:8200"
+                tls_disable = "true"
+              }
+              listener "tcp" {
+                address = "$${POD_IP_ADDR}:8200"
+                tls_disable = "true"
+              }
+
+              storage "s3" {
+                bucket          = "vault-storage"
+                endpoint        = "http://$${s3_endpoint}"
+                region          = "us-east-1"
+                access_key      = "$${s3_access_key_id}"
+                secret_key      = "$${s3_secret_access_key}"
+                s3_force_path_style = "true"  # REQUIRED for MinIO!
+              }
+
+              # kms
+              seal "awskms" {
+                region     = "us-east-1"
+                kms_key_id = "$key_id"
+                access_key = "dummy"
+                secret_key = "dummy"
+                endpoint   = "http://local-kms.vault.svc.cluster.local:8080"
+              }
+
+              disable_mlock = true
+              EOF
+
+          volumeMounts:
+            - name: vault-config
+              mountPath: /etc/vault/config
+            - name: kms-key
+              mountPath: /kms
+      containers:
+        - name: vault
+          image: "vault:1.10.3"
+          env:
+            - name: POD_IP_ADDR
+              valueFrom:
+                fieldRef:
+                  fieldPath: "status.podIP"
+            - name: "VAULT_API_ADDR"
+              valueFrom:
+                configMapKeyRef:
+                  name: vault
+                  key: api-addr
+            - name: "VAULT_CLUSTER_ADDR"
+              value: "http://$(POD_IP_ADDR):8201"
+            - name: "VAULT_K8S_NAMESPACE"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.namespace"
+            - name: "VAULT_K8S_POD_NAME"
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.name"
+          args:
+            - "server"
+            - "-config=/etc/vault/config/vault.hcl"
+          ports:
+            - name: http
+              containerPort: 8200
+              protocol: "TCP"
+            - name: server
+              containerPort: 8201
+              protocol: "TCP"
+          readinessProbe:
+            tcpSocket:
+              port: 8200
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "1Gi"
+          securityContext:
+            capabilities:
+              add:
+                - IPC_LOCK
+          volumeMounts:
+            - name: vault-config
+              mountPath: /etc/vault/config
+      volumes:
+        - name: vault-config
+          emptyDir: {}
+        - name: kms-key
+          emptyDir: {}
+

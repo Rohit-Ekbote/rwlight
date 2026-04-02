@@ -1,0 +1,5 @@
+resources:
+# Sync gitservice secrets into flux-system namespace from Vault
+- gitservice-sa.yaml
+- gitservice-csi-secret-class.yaml
+- gitservice-deployment.yaml

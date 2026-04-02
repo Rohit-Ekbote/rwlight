@@ -1,0 +1,151 @@
+---
+# NOTE: usearch-indexer and usearch-query are the same FastAPI server deployed separately
+# for load balancing (indexing operations vs query operations). Environment variables
+# should be kept in sync between these two deployments.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: usearch-indexer
+  namespace: backend-services
+  labels:
+    app: usearch-indexer
+    code-owner: runwhen
+    codecollection.runwhen.com/app: usearch-indexer
+spec:
+  selector:
+    matchLabels:
+      app: usearch-indexer
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: usearch-indexer
+      labels:
+        app: usearch-indexer
+        code-owner: runwhen
+        codecollection.runwhen.com/app: usearch-indexer
+    spec:
+      serviceAccountName: usearch-sa
+      # Init container waits for migration controller
+      initContainers:
+      - name: wait-for-migrations
+        image: usearch:latest
+        command: ["python3", "/usearch/scripts/wait-for-migrations.py"]
+        env:
+        - name: MIGRATION_CONTROLLER_URL
+          value: "http://usearch-migration-controller.backend-services.svc.cluster.local:8080"
+        - name: MAX_ATTEMPTS
+          value: "300"  # 5 minutes max wait
+        - name: RETRY_INTERVAL
+          value: "2"  # Check every 2 seconds
+      containers:
+      - name: usearch-indexer
+        image: usearch:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/usr/local/bin/entrypoint.sh", "indexer"]
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        # Service type - all endpoints active, deployed separately for load balancing
+        - name: USEARCH_SERVICE_TYPE
+          value: "indexer"
+        # Server configuration
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8000"
+        - name: UVICORN_WORKERS
+          value: "2"  # Number of uvicorn worker processes
+        # Database configuration - using pgbouncer via postgres operator secret
+        # The application will construct DATABASE_URL from individual fields
+        - name: DATABASE_ENGINE
+          value: postgresql
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: user
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: password
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: pgbouncer-host
+        - name: DATABASE_PORT
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: pgbouncer-port
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: dbname
+        - name: USE_PGBOUNCER
+          value: "true"
+        # Graph database configuration
+        - name: GRAPH_DB_TYPE
+          value: "neo4j"
+        - name: GRAPH_DB_URI
+          value: "neo4j://neo4j.backend-services.svc.cluster.local:7687"
+        - name: GRAPH_DB_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: neo4j-auth
+              key: NEO4J_AUTH
+        - name: GRAPH_DB_DATABASE
+          value: "neo4j"
+        # Redis/Celery configuration (matching celery-worker pattern)
+        - name: CACHE_TYPE
+          value: "redis-sentinel"
+        - name: SENTINEL_HOSTS
+          value: "redis-sentinel-headless"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-sentinel
+              key: redis-password
+        # Migration controller
+        - name: MIGRATION_CONTROLLER_URL
+          value: "http://usearch-migration-controller.backend-services.svc.cluster.local:8080"
+        # Environment mode
+        - name: ENV_MODE
+          value: "prod"
+        # PAPI configuration (adjust based on your setup)
+        - name: PAPI_BASE_URL
+          value: "https://papi.${subdomain}.${domain}"
+        # Add other environment variables as needed
+        envFrom:
+        - configMapRef:
+            name: papi-env-vars-cm
+            optional: true
+        - configMapRef:
+            name: usearch-env-vars-cm
+            optional: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"

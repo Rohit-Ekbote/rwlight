@@ -1,0 +1,193 @@
+namespace: backend-services
+resources:
+- namespace.yaml
+- storage.yaml
+- agentfarm-service.yaml
+- agentfarm-deployment.yaml
+- agentfarm-ingress.yaml
+- activities-deployment.yaml
+- activities-service.yaml
+- alerts-service.yaml
+- alerts-deployment.yaml
+- modelsync-deployment.yaml
+- modelsync-service.yaml
+- image-pull-sa.yaml
+- papi-csi-secret-class.yaml
+- papi-cluster-role.yaml
+- papi-sa.yaml
+- papi-cluster-role-binding.yaml
+- papi-service.yaml
+- papi-deployment.yaml
+- papi-ingress.yaml
+- postgres-cluster.yaml
+- qdrant-helm.yaml
+- redis-sentinel-helm.yaml
+- slackbot-deployment.yaml
+- slackbot-service.yaml
+- slackbot-ingress.yaml
+- slackbot-csi-secret-class.yaml
+- slackbot-sa.yaml
+- sobow-search-configmap.yaml
+- sobow-index-deployment.yaml
+- sobow-index-service.yaml
+- sobow-search-deployment.yaml
+- sobow-search-service.yaml
+- sobrain-service.yaml
+- sobrain-deployment.yaml
+- embedder-deployment.yaml
+- embedder-service.yaml
+- embedder-configmap.yaml
+- celery-sa.yaml
+- migration-controller.yaml
+- migration-scripts-configmap.yaml
+- task-worker-deployment.yaml
+- task-scheduler-deployment.yaml
+- neo4j-helm.yaml
+- usearch-sa.yaml
+- usearch-migration-controller.yaml
+- usearch-indexer-deployment.yaml
+- usearch-indexer-service.yaml
+- usearch-query-deployment.yaml
+- usearch-query-service.yaml
+- usearch-worker-deployment.yaml
+- usearch-beat-deployment.yaml
+- webhooks-sa.yaml
+- webhooks-configmap.yaml
+- webhooks-deployment.yaml
+- webhooks-service.yaml
+- webhooks-ingress.yaml
+
+images:
+- name: backend-services
+  newName: ${artifact_registry_path}backend-services
+  newTag: pr-3242-c60dee1
+- name: shared-services
+  newName: ${artifact_registry_path}shared-services
+  newTag: main-3f7d791
+- name: agentfarm
+  newName: ${artifact_registry_path}agent-farm
+  newTag: main-a0cfd4e
+- name: webhooks-service
+  newName: ${artifact_registry_path}webhooks-service
+  newTag: main-3f7d791
+- name: usearch
+  newName: ${artifact_registry_path}usearch
+  newTag: main-9351942
+
+# Avoiding the template repo while reducing replicas
+replicas:
+- count: 1
+  name: papi
+- count: 1
+  name: activities
+- count: 1
+  name: alerts
+- count: 1
+  name: task-worker
+- count: 1
+  name: task-scheduler
+- count: 1
+  name: sobow-index
+- count: 1
+  name: sobow-search
+
+configMapGenerator:
+- literals:
+  - DEFAULT_GITLAB_GROUP='${cluster_name}'
+  - DEFAULT_LOCATION_NAME='${default_location_cluster}'
+  - DEFAULT_CORESTATE_NAME='${cluster_name}'
+  - GIT_SERVICE_URL='http://gitea-http.gitea.svc.cluster.local:3000'
+  - CONTAINER_REGISTRY='gcr.io/${project_id}'
+  - PRODUCTION_LOCATIONS_GIT_URL='https://gitea.${subdomain}.${domain}/runwhen-platform/production-locations'
+  - PRODUCTION_CORESTATE_GIT_URL='https://gitea.${subdomain}.${domain}/runwhen-platform/production-locations'
+  - PLATFORM_ARTIFACTS_GIT_URL='https://gitea.${subdomain}.${domain}/runwhen-platform/platform-robot-runtime'
+  - DOMAIN='${subdomain}.${domain}'
+  - SUBDOMAIN='${subdomain}'
+  - VAULT_URL="http://vault.vault.svc.cluster.local:8200"
+  - VAULT_BACKEND_SERVICES_WRITE_WORKSPACE_SECRETS_ROLE="papi-write-workspaces"
+  - PAPI_SERVICE_URL='http://papi.backend-services.svc.cluster.local'
+  - PAPI_PUBLIC_URL='https://papi.${subdomain}.${domain}'
+  - ACTIVITIES_SERVICE_URL='http://activities.backend-services.svc.cluster.local'
+  - VAULT_AUTH_MOUNT_POINT='kubernetes'
+  - CORTEX_QUERY_URL="http://mimir-nginx.mimir.svc.cluster.local/prometheus/api/v1/query"
+  - ALLOWED_HOSTS=['*.${subdomain}.${domain}', '127.0.0.1', 'localhost', 'papi.backend-services.svc.cluster.local']
+  - LOGIN_REDIRECT_URL="https://app.${subdomain}.${domain}/success"
+  - SHARED_WORKSPACE_BUCKET="shared-workspace"
+  - USER_PAGES_URL='https://app.${subdomain}.${domain}'
+  - WHAT_KNOWLEDGE_JSON_ASSET="https://storage.googleapis.com/runwhen-nonprod-shared-images/search/test/what_knowledge.json"
+  - BOW_SERVICE_URL='http://bow-search.backend-services.svc.cluster.local'
+  - BOW_SEARCH_URL='http://bow-search.backend-services.svc.cluster.local'
+  - BOW_INDEX_URL='http://bow-index.backend-services.svc.cluster.local'
+  - SOBOW_SERVICE_URL='http://sobow-search.backend-services.svc.cluster.local'
+  - SOBOW_SEARCH_URL='http://sobow-search.backend-services.svc.cluster.local'
+  - SOBOW_INDEX_URL='http://sobow-index.backend-services.svc.cluster.local'
+  - MODELSYNC_URL='http://modelsync.backend-services.svc.cluster.local'
+  - AGENTFARM_URL='http://agentfarm.backend-services.svc.cluster.local'
+  - LITELLM_PROXY_API_BASE='http://litellm-proxy.llm-gateway.svc.cluster.local:4000'
+  - ACTIVITY_PROCESSOR_EMAIL_FROM_ADDRESS='noreply@runwhen.com'
+  - ACTIVITY_PROCESSOR_EMAIL_MAILGUN_URL='https://api.mailgun.net/v3/runwhen.com/messages'
+  - GRANIAN_THREADS="3"
+  - GRANIAN_BLOCKING_THREADS="6"
+  - WEBHOOK_SERVICE_URL="https://webhooks.${subdomain}.${domain}/api/v1"
+  - NEW_WORKSPACE_UPLOAD_ENABLED="true"
+  - CELERY_WORKER_MAX_MEMORY_PER_CHILD="10000"
+  - IS_LOCAL='${is_local:=false}'
+  - S3_INTERNAL_HOST='${s3_endpoint}'
+  - S3_HOST='minio.${subdomain}.${domain}'
+  - VAULT_ORG_READ_SECRETS_ROLE="sobrain-secrets"
+  - FRAMEWORK='fastapi'
+  - DJANGO_LOG_LEVEL="INFO"
+  - RUST_BACKTRACE="1"
+  - INDEXING_SKIPPED_WORKSPACES=""
+  name: papi-env-vars-cm
+- literals:
+  # Core Service Configuration
+  - PORT="8080"
+  # PAPI client configuration
+  - PAPI_SERVICE_URL="http://papi.backend-services.svc.cluster.local"
+  - PAPI_TIMEOUT="30.0"
+  - PAPI_MAX_RETRIES="3"
+  - PAPI_RETRY_DELAY="1.0"
+  - PAPI_LOG_LEVEL="INFO"
+  - PAPI_ENABLE_REQUEST_LOGGING="true"
+  - PAPI_MAX_CONNECTIONS="10"
+  - PAPI_MAX_KEEPALIVE_CONNECTIONS="5"
+  # Vault configuration for reading llm api keys.
+  - VAULT_AUTH_MOUNT_POINT='kubernetes'
+  - VAULT_URL="http://vault.vault.svc.cluster.local:8200"
+  - VAULT_ORG_READ_SECRETS_ROLE="agentfarm-secrets"
+  - USEARCH_QUERY_SERVICE_URL="http://usearch-query.backend-services.svc.cluster.local"
+  name: agentfarm-env-vars-cm
+- literals:
+  - SLACKBOT_URL="https://slack.${subdomain}.${domain}"
+  - SLACKBOT_INTERNAL_URL="http://slackbot.backend-services.svc.cluster.local"
+  - SLACKBOT_SECRETS_PATH="/slackbot-creds" # defaults to "/slackbot-creds"
+  - SLACKBOT_SLASH_COMMAND="${slackbot_slash_command:=runwhen}"
+  - VAULT_SLACKBOT_SECRETS_ROLE="slackbot-workspace-secrets"
+  name: slackbot-env-vars-cm
+- literals:
+  - PAPI_SERVICE_URL="http://papi.backend-services.svc.cluster.local"
+  - PAPI_BASE_URL="https://papi.${subdomain}.${domain}"
+  - PAPI_TIMEOUT="30.0"
+  - PAPI_MAX_RETRIES="3"
+  - PAPI_RETRY_DELAY="1.0"
+  - PAPI_LOG_LEVEL="INFO"
+  - PAPI_ENABLE_REQUEST_LOGGING="true"
+  - PAPI_MAX_CONNECTIONS="10"
+  - PAPI_MAX_KEEPALIVE_CONNECTIONS="5"
+  - GRAPH_DB_TYPE="neo4j"
+  - GRAPH_DB_URI="neo4j://neo4j.backend-services.svc.cluster.local:7687"
+  - GRAPH_DB_USER="neo4j"
+  - GRAPH_DB_DATABASE="neo4j"
+  - MIGRATION_CONTROLLER_URL="http://usearch-migration-controller.backend-services.svc.cluster.local:8080"
+  - MIGRATION_CONTROLLER_PORT="8080"
+  - USEARCH_INDEXER_SERVICE_URL="http://usearch-indexer.backend-services.svc.cluster.local"
+  - ENV_MODE="prod"
+  - VAULT_AUTH_MOUNT_POINT='kubernetes'
+  - VAULT_URL="http://vault.vault.svc.cluster.local:8200"
+  - VAULT_ROLE="usearch-secrets"
+  - JOB_STATUS_POLLER_INTERVAL="60"
+  name: usearch-env-vars-cm
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization

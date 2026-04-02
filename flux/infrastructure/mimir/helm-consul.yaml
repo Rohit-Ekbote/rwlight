@@ -1,0 +1,27 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: consul
+  namespace: mimir
+spec:
+  releaseName: consul
+  chart:
+    spec:
+      version: 1.0.0
+      chart: consul
+      sourceRef:
+        kind: HelmRepository
+        name: hashicorp
+        namespace: flux-system
+  interval: 5m
+  # https://github.com/hashicorp/consul-k8s/blob/main/charts/consul/values.yaml
+  values: 
+    global: 
+      enabled: true
+    server: 
+      replicas: 1
+      connect: false
+    connectInject: 
+      enabled: false
+    meshGateway:
+      enabled: false

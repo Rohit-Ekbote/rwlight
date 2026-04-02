@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-proxy-config
+  namespace: llm-gateway
+data:
+  proxy_config.yaml: |
+    model_list:
+      - model_name: fake-openai-endpoint
+        litellm_params:
+          model: openai/fake
+          api_key: fake-key
+          api_base: https://exampleopenaiendpoint-production.up.railway.app/
+      - model_name: runwhen-nonprod-test-claude-opus-4-6
+        litellm_params:
+          model: azure_ai/claude-opus-4-6
+          api_base: https://runwhen-nonprod-test-azure-aiservices-001.services.ai.azure.com/anthropic
+          base_model: "claude-opus-4-6"
+          litellm_credential_name: "RunWhen-LLM-Azure-Integration-Connector"
+
+    general_settings:
+      master_key: os.environ/LITELLM_MASTER_KEY
+      alerting: ["slack"]      # Setup slack alerting - get alerts on LLM exceptions, Budget Alerts, Slow LLM Responses
+      proxy_batch_write_at: 60 # Base write spend updates every 60s
+      database_connection_pool_limit: 20 # limit the number of database connections to = MAX Number of DB Connections/Number of instances of litellm proxy (Around 10-20 is good number)
+
+      # OPTIONAL Best Practices
+      disable_error_logs: False # turn off writing LLM Exceptions to DB
+      allow_requests_on_db_unavailable: True # Only USE when running LiteLLM on your VPC. Allow requests to still be processed even if the DB is unavailable. We recommend doing this if you're running LiteLLM on VPC that cannot be accessed from the public internet.
+      store_prompts_in_spend_logs: True # Store prompts in spend logs
+
+    litellm_settings:
+      request_timeout: 600    # raise Timeout error if call takes longer than 600 seconds. Default value is 6000seconds if not set
+      set_verbose: False      # Switch off Debug Logging, ensure your logs do not have any debugging on
+      json_logs: True         # Get debug logs in json format
+      turn_off_message_logging: False
+      enable_azure_ad_token_refresh: true
+
+      # Cache settings
+      cache: True
+      cache_params:
+        type: redis
+        host: os.environ/REDIS_HOST
+        port: 6379
+        password: os.environ/REDIS_PASSWORD
+        namespace: os.environ/REDIS_NAMESPACE
+        supported_call_types: ["acompletion", "atext_completion", "aembedding", "atranscription"]
+        mode: default_off # if default_off, you need to opt in to caching on a per call basis
+        ttl: 600 # ttl for caching
+
+      # Logging 
+      success_callback: ["s3_v2"]
+      s3_callback_params:
+        s3_bucket_name: litellm-logging
+        s3_region_name: auto
+        s3_aws_access_key_id:  os.environ/AWS_ACCESS_KEY_ID
+        s3_aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
+        s3_endpoint_url: ${s3_endpoint}
+
+    router_settings:
+      routing_strategy: usage-based-routing-v2 
+      redis_host: os.environ/REDIS_HOST
+      redis_port: os.environ/REDIS_PORT
+      redis_password: os.environ/REDIS_PASSWORD
+      enable_pre_call_checks: True
+      allowed_fails: 3
+      cooldown_time: 30
+      disable_cooldowns: True
+      enable_tag_filtering: True
+      retry_policy: {
+        "AuthenticationErrorRetries": 3,
+        "TimeoutErrorRetries": 3,
+        "RateLimitErrorRetries": 3,
+        "ContentPolicyViolationErrorRetries": 4,
+        "InternalServerErrorRetries": 4
+      }
+      allowed_fails_policy: {
+        "BadRequestErrorAllowedFails": 1000, # Allow 1000 BadRequestErrors before cooling down a deployment
+        "AuthenticationErrorAllowedFails": 10, # int 
+        "TimeoutErrorAllowedFails": 12, # int 
+        "RateLimitErrorAllowedFails": 10000, # int 
+        "ContentPolicyViolationErrorAllowedFails": 15, # int 
+        "InternalServerErrorAllowedFails": 20, # int 
+      }

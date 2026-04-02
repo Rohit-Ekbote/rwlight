@@ -1,0 +1,105 @@
+apiVersion: postgres-operator.crunchydata.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: core
+  namespace: backend-services
+spec:
+  image: ${artifact_registry_path}crunchy-postgres:ubi8-13.9-2
+  imagePullSecrets:
+    - name: gcp-registry-key
+  postgresVersion: 13
+  patroni:
+    dynamicConfiguration:
+      postgresql:
+        parameters:
+          shared_preload_libraries: "pg_stat_statements"
+  instances:
+    - name: instance2
+      replicas: 1
+      dataVolumeClaimSpec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 30Gi
+        storageClassName: local-path
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  postgres-operator.crunchydata.com/cluster: core
+                  postgres-operator.crunchydata.com/instance-set: instance2
+  proxy:
+    pgBouncer:
+      image: registry.developers.crunchydata.com/crunchydata/crunchy-pgbouncer:ubi8-1.17-5
+      replicas: 1
+      config: 
+        global:
+          pool_mode: transaction
+          query_wait_timeout: "30"               
+          default_pool_size: "40"                
+          min_pool_size: "10"                    
+          reserve_pool_size: "5"                
+          reserve_pool_timeout: "5"              
+          max_client_conn: "1000"                
+          server_idle_timeout: "180"            
+          server_reset_query: "DISCARD ALL;"     
+          server_tls_sslmode: verify-ca 
+          stats_users: "exporter"
+          admin_users: "_crunchypgbouncer"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  postgres-operator.crunchydata.com/cluster: core
+                  postgres-operator.crunchydata.com/instance-set: instance1
+  # https://access.crunchydata.com/documentation/postgres-operator/latest/tutorials/backups-disaster-recovery/backup-management
+  backups:
+    pgbackrest:
+      metadata:
+        annotations: 
+          linkerd.io/inject: disabled
+      image: ${artifact_registry_path}crunchy-pgbackrest:ubi8-2.41-4
+      global:
+        repo1-retention-full: "1"
+        repo1-retention-full-type: time
+      repos:
+      - name: repo1
+        # schedules:
+        #   full: "0 4 * * *"
+        volume:
+          volumeClaimSpec:
+            accessModes:
+            - "ReadWriteOnce"
+            resources:
+              requests:
+                storage: 1Gi
+  userInterface:
+    pgAdmin:
+      dataVolumeClaimSpec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+      replicas: 1  
+  users:
+    - name: core
+      databases:
+        - core
+      options: "CREATEDB"
+    - name: agentfarm
+      databases:
+        - agentfarm
+      options: "CREATEDB"
+    - name: usearch
+      databases:
+      - usearch

@@ -1,0 +1,4 @@
+# https://github.com/CrunchyData/postgres-operator-examples/tree/main/kustomize/install/manager
+resources:
+- manager.yaml
+- manager-upgrade.yaml

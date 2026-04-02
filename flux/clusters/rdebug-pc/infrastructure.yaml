@@ -1,0 +1,92 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-ingress-nginx
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/base/ingress-nginx
+  prune: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-base-sources
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/base/sources
+  prune: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-base-secret-store-csi-driver
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/base/secret-store-csi-driver
+  prune: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-base-vault-csi-driver
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/base/vault-csi-driver
+  prune: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-base-kube-state-metrics-install
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/base/kube-state-metrics/install
+  prune: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-base-kube-state-metrics-config
+  namespace: flux-system
+spec:
+  dependsOn: 
+    - name: infrastructure-base-kube-state-metrics-install
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/base/kube-state-metrics/config
+  prune: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-flux-system-extra
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/base/flux-system-extra
+  prune: true

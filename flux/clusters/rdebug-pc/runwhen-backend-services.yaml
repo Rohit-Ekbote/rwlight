@@ -1,0 +1,19 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: runwhen-backend-services
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./apps/backend-services
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: platform-cluster-cluster-vars
+      - kind: Secret
+        name: platform-cluster-cluster-vars

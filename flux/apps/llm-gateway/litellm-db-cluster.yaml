@@ -1,0 +1,87 @@
+apiVersion: postgres-operator.crunchydata.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: litellm-db
+  namespace: llm-gateway
+spec:
+  image: ${artifact_registry_path}crunchy-postgres:ubi8-13.9-2
+  imagePullSecrets:
+    - name: gcp-registry-key
+  postgresVersion: 13
+  patroni:
+    dynamicConfiguration:
+      postgresql:
+        parameters:
+          shared_preload_libraries: "pg_stat_statements"
+  instances:
+    - name: instance1
+      replicas: 1
+      dataVolumeClaimSpec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 10Gi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  postgres-operator.crunchydata.com/cluster: litellm-db
+                  postgres-operator.crunchydata.com/instance-set: instance1
+  proxy:
+    pgBouncer:
+      image: registry.developers.crunchydata.com/crunchydata/crunchy-pgbouncer:ubi8-1.17-5
+      replicas: 1
+      config: 
+        global:
+          pool_mode: transaction
+          query_wait_timeout: "60" 
+          default_pool_size: "50"
+          max_client_conn: "2500"
+          server_idle_timeout: "60"
+          server_tls_sslmode: verify-ca 
+          stats_users: "exporter"
+          admin_users: "_crunchypgbouncer"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  postgres-operator.crunchydata.com/cluster: litellm-db
+                  postgres-operator.crunchydata.com/instance-set: instance1
+  backups:
+    pgbackrest:
+      metadata:
+        annotations: 
+          linkerd.io/inject: disabled
+      image: ${artifact_registry_path}crunchy-pgbackrest:ubi8-2.41-4
+      global:
+        repo1-retention-full: "1"
+        repo1-retention-full-type: time
+      repos:
+      - name: repo1
+        # schedules:
+        #   full: "0 4 * * *"
+        volume:
+          volumeClaimSpec:
+            accessModes:
+            - "ReadWriteOnce"
+            resources:
+              requests:
+                storage: 1Gi
+  userInterface:
+    pgAdmin:
+      dataVolumeClaimSpec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+      replicas: 1 

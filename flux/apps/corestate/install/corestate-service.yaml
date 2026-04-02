@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: corestate
+    component: corestate
+    control-plane: controller-manager
+    controller-manager: corestate
+  name: corestate-controller-manager-metrics-service
+  namespace: corestate
+spec:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: https
+  selector:
+    app: corestate
+    component: corestate
+    control-plane: controller-manager
+    controller-manager: corestate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: corestate
+    component: corestate
+    control-plane: controller-manager
+    controller-manager: corestate
+  name: corestate-explorer
+  namespace: corestate
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 3232
+  selector:
+    app: corestate
+    component: corestate
+    control-plane: controller-manager
+    controller-manager: corestate

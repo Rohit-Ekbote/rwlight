@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: litellm-proxy-sa
+  namespace: llm-gateway
+  labels:
+    app: litellm-proxy
+    code-owner: runwhen 

@@ -1,0 +1,3246 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: codecollections.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: CodeCollection
+    listKind: CodeCollectionList
+    plural: codecollections
+    shortNames:
+    - cc
+    - ccs
+    - rwcc
+    - rwccs
+    singular: codecollection
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.lastReconciledAt
+      name: LastReconciledAt
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          CodeCollection is the Schema for the codecollections API
+          The user-configurable aspects of publishing a set of codebundles.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              CodeCollectionSpec defines the desired state of CodeCollection.
+              The user-configurable aspects of publishing a set of CodeBundles.
+            properties:
+              description:
+                description: |-
+                  Description is used for defining a breif summary of the CodeCollection and its intented functionality.
+                  In the absense of a README.md file in the git repository this is essential.
+                type: string
+              developmentBranch:
+                default: main
+                description: |-
+                  DevelopmentBranch is the git branch that will be watched regularly for development purposes.
+                  Defaults to "main".
+                type: string
+              homepage:
+                description: Homepage is an optional field for the dedicated homepage
+                  of the CodeCollection.
+                type: string
+              maintainers:
+                description: Maintainers is a list of RunWhen Users and their Roles
+                  that maintain this CodeCollection.
+                items:
+                  properties:
+                    role:
+                      description: Roles that users play in maintaining this codecollection.
+                      type: string
+                    user:
+                      description: The user ID in the form of their primary email
+                        address.
+                      type: string
+                  type: object
+                type: array
+              public:
+                default: true
+                description: Public defines whether this CodeCollection is public
+                  or private (defaults to true).
+                type: boolean
+              repoURL:
+                description: RepoURL is the git url for this CodeCollection.
+                type: string
+              robotRuntimeBaseImage:
+                description: RobotRuntimeBaseImage is the base image for the robot
+                  runtime.
+                type: string
+              stable:
+                description: |-
+                  StableVersion is an optional field to specify the latest stable git tag for this CodeCollection if one exists
+                  This field will be used for display purposes on the frontend and nothing more.
+                properties:
+                  releaseNotes:
+                    description: A set of bullet points on what changed in this release,
+                      or a URL where this can be found.
+                    type: string
+                  tag:
+                    description: The git ref, ideally a tag, where the latest stable
+                      can be downloaded.
+                    type: string
+                type: object
+              watchAllBranches:
+                default: false
+                description: |-
+                  WatchAllBranches will watch all branches for changes and update CodeCollectionVersions as necessary.
+                   (The CCV Controller will trigger a Kaniko Build on Creation and Updates)
+                type: boolean
+            required:
+            - developmentBranch
+            - public
+            - repoURL
+            - watchAllBranches
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: CodeCollectionStatus defines the observed state of CodeCollection.
+            properties:
+              lastReconciledAt:
+                description: LastReconciledAt is the time at which the CodeCollection
+                  was last checked for new tags.
+                format: date-time
+                type: string
+              versions:
+                additionalProperties:
+                  type: string
+                description: Versions tracks the object names of the associated CodeCollectionVersions.
+                type: object
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: codecollectionversions.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: CodeCollectionVersion
+    listKind: CodeCollectionVersionList
+    plural: codecollectionversions
+    shortNames:
+    - ccv
+    - ccvs
+    - rwccv
+    - rwccvs
+    singular: codecollectionversion
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.buildStatus
+      name: BuildStatus
+      type: string
+    - jsonPath: .status.indexStatus.indexRevision
+      name: LastIndexed
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: CodeCollectionVersion is the Schema for the codecollectionversions
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CodeCollectionVersionSpec defines the desired state of CodeCollectionVersion.
+            properties:
+              collectionName:
+                description: CollectionName represents the name of the CodeCollection
+                  object that created this object
+                type: string
+              collectionRevision:
+                description: CollectionRevision represents the target commit id for
+                  this version.
+                type: string
+              isStable:
+                description: IsStable represents whether this CodeCollectionVersion
+                  is stable and should be indexed.
+                type: boolean
+              ref:
+                description: Ref is the git ref that will be used to create the associated
+                  container image.
+                type: string
+              repoURL:
+                description: RepoURL is the path to the git repository to clone and
+                  build the CodeCollection from.
+                type: string
+              robotRuntimeBaseImage:
+                description: RobotRuntimeBaseImage is the base image for the robot
+                  runtime.
+                type: string
+              robotRuntimeRevision:
+                description: RobotRuntimeRevision represents the target commit id
+                  for the robot runtime git repository.
+                type: string
+            type: object
+          status:
+            description: CodeCollectionVersionStatus defines the observed state of
+              CodeCollectionVersion.
+            properties:
+              buildStatus:
+                description: BuildStatus repesents the CodeBundle Build Status (Kaninko
+                  Build Job).
+                type: string
+              image:
+                description: Image represents the path to the container image repository.
+                type: string
+              imageTag:
+                description: ImageTag repesents the tag of the image pushed to the
+                  container image repository.
+                type: string
+              indexStatus:
+                description: IndexStatus
+                properties:
+                  createdAt:
+                    format: date-time
+                    type: string
+                  indexRevision:
+                    type: string
+                  lastIndexFinishedAt:
+                    format: date-time
+                    type: string
+                  lastIndexStartedAt:
+                    format: date-time
+                    type: string
+                  modifiedAt:
+                    format: date-time
+                    type: string
+                  platformIndexVersion:
+                    format: int64
+                    type: integer
+                  status:
+                    type: string
+                type: object
+              jobName:
+                description: JobName represents the name of the Kaniko Build Job used
+                  to build and push the container image.
+                type: string
+              lastIndexedRevision:
+                description: LastIndexedRevision represent the last CodeCollection
+                  Repository Revision that has been indexed.
+                type: string
+              objectName:
+                description: ObjectName represents the name of the build context archive
+                  written to object storage.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: coderuns.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: CodeRun
+    listKind: CodeRunList
+    plural: coderuns
+    shortNames:
+    - cdr
+    - cdrs
+    singular: coderun
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: CodeRun is the Schema for the coderuns API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CodeRunSpec defines the desired state of a CodeRun.
+            properties:
+              env:
+                items:
+                  description: EnvVar represents an environment variable present in
+                    a Container.
+                  properties:
+                    name:
+                      description: Name of the environment variable. Must be a C_IDENTIFIER.
+                      type: string
+                    value:
+                      description: |-
+                        Variable references $(VAR_NAME) are expanded
+                        using the previously defined environment variables in the container and
+                        any service environment variables. If a variable cannot be resolved,
+                        the reference in the input string will be unchanged. Double $$ are reduced
+                        to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                        "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                        Escaped references will never be expanded, regardless of whether the variable
+                        exists or not.
+                        Defaults to "".
+                      type: string
+                    valueFrom:
+                      description: Source for the environment variable's value. Cannot
+                        be used if value is not empty.
+                      properties:
+                        configMapKeyRef:
+                          description: Selects a key of a ConfigMap.
+                          properties:
+                            key:
+                              description: The key to select.
+                              type: string
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                TODO: Add other useful fields. apiVersion, kind, uid?
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                TODO: Drop `kubebuilder:default` when controller-gen doesn't need it https://github.com/kubernetes-sigs/kubebuilder/issues/3896.
+                              type: string
+                            optional:
+                              description: Specify whether the ConfigMap or its key
+                                must be defined
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        fieldRef:
+                          description: |-
+                            Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                            spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                          properties:
+                            apiVersion:
+                              description: Version of the schema the FieldPath is
+                                written in terms of, defaults to "v1".
+                              type: string
+                            fieldPath:
+                              description: Path of the field to select in the specified
+                                API version.
+                              type: string
+                          required:
+                          - fieldPath
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        resourceFieldRef:
+                          description: |-
+                            Selects a resource of the container: only resources limits and requests
+                            (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                          properties:
+                            containerName:
+                              description: 'Container name: required for volumes,
+                                optional for env vars'
+                              type: string
+                            divisor:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: Specifies the output format of the exposed
+                                resources, defaults to "1"
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            resource:
+                              description: 'Required: resource to select'
+                              type: string
+                          required:
+                          - resource
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        secretKeyRef:
+                          description: Selects a key of a secret in the pod's namespace
+                          properties:
+                            key:
+                              description: The key of the secret to select from.  Must
+                                be a valid secret key.
+                              type: string
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                TODO: Add other useful fields. apiVersion, kind, uid?
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                TODO: Drop `kubebuilder:default` when controller-gen doesn't need it https://github.com/kubernetes-sigs/kubebuilder/issues/3896.
+                              type: string
+                            optional:
+                              description: Specify whether the Secret or its key must
+                                be defined
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                      type: object
+                  required:
+                  - name
+                  type: object
+                type: array
+              imagePath:
+                type: string
+              imageTag:
+                type: string
+              location:
+                type: string
+              maxRunTime:
+                format: int64
+                type: integer
+              parentKind:
+                type: string
+              resources:
+                description: ResourceRequirements describes the compute resource requirements.
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+
+                      This is an alpha field and requires enabling the
+                      DynamicResourceAllocation feature gate.
+
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+              rfileName:
+                type: string
+              slxName:
+                type: string
+              slxShortName:
+                type: string
+              vaultAuthMountPoint:
+                type: string
+              vaultPolicies:
+                items:
+                  type: string
+                type: array
+              workspaceName:
+                type: string
+              wrapperKind:
+                type: string
+            required:
+            - location
+            - vaultAuthMountPoint
+            - vaultPolicies
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: CodeRunStatus defines the observed state of CodeRun.
+            properties:
+              deploymentConditions:
+                description: DeploymentConditions is a copy of the Deployment conditions
+                  from the associated Deployment.
+                items:
+                  description: DeploymentCondition describes the state of a deployment
+                    at a certain point.
+                  properties:
+                    lastTransitionTime:
+                      description: Last time the condition transitioned from one status
+                        to another.
+                      format: date-time
+                      type: string
+                    lastUpdateTime:
+                      description: The last time this condition was updated.
+                      format: date-time
+                      type: string
+                    message:
+                      description: A human readable message indicating details about
+                        the transition.
+                      type: string
+                    reason:
+                      description: The reason for the condition's last transition.
+                      type: string
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: Type of deployment condition.
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              jobConditions:
+                description: JobConditions is a copy of the Job conditions from the
+                  associated Job.
+                items:
+                  description: JobCondition describes current state of a job.
+                  properties:
+                    lastProbeTime:
+                      description: Last time the condition was checked.
+                      format: date-time
+                      type: string
+                    lastTransitionTime:
+                      description: Last time the condition transit from one status
+                        to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: Human readable message indicating details about
+                        last transition.
+                      type: string
+                    reason:
+                      description: (brief) reason for the condition's last transition.
+                      type: string
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: Type of job condition, Complete or Failed.
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastRemoteUpdate:
+                description: LastRemoteUpdate is the last time the remote cluster
+                  has observed changes to this resources assoiated Job or Deployment.
+                format: date-time
+                type: string
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: locations.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: Location
+    listKind: LocationList
+    plural: locations
+    shortNames:
+    - loc
+    - locs
+    - rwloc
+    - rwlocs
+    singular: location
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.locationName
+      name: LocationName
+      type: string
+    - jsonPath: .spec.locationType
+      name: LocationType
+      type: string
+    - jsonPath: .status.heartbeat
+      name: Heartbeat
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: LocationSpec defines the Location Configuration.
+            properties:
+              allowedWorkspaces:
+                description: |-
+                  AllowedWorkspaces is a list of workspaces that are allowed to run on this location.
+                  If empty, all workspaces are allowed to run on this location.
+                items:
+                  type: string
+                type: array
+              locationName:
+                description: |-
+                  LocationName represents the name of the location to be displayed in the UI and
+                  used in the API for lookups.
+                type: string
+              locationType:
+                description: LocationType represents the typw of this location. (public,
+                  workspace, or organization)
+                enum:
+                - public
+                - workspace
+                - organization
+                type: string
+              vaultAddress:
+                description: VaultAddress is the URL to the Vault server used by this
+                  location.
+                type: string
+              vaultAuthMountPoint:
+                description: VaultAuthMountPoint represents the mount point to be
+                  used on the location cluster.
+                type: string
+              vaultPolicies:
+                description: |-
+                  VaultPolicies is a list of policies within vault to be applied to workspaces so that
+                  ServiceLevelIndicators (SLIs) and Runbooks/TaskSets can pull workspace secrets from their associated
+                  Pods in this location.
+                items:
+                  type: string
+                type: array
+            type: object
+          status:
+            description: LocationStatus defines the observed state of Location
+            properties:
+              heartbeat:
+                description: Heartbeat represents the last time the Location connected
+                  to the Platfrom CoreState Cluster
+                format: date-time
+                type: string
+              runners:
+                description: Runners represents the list of runners registered with
+                  the Location.
+                items:
+                  properties:
+                    createdAt:
+                      description: CreatedAt represents the time the runner was created.
+                      format: date-time
+                      type: string
+                    id:
+                      description: ID represents the unique identifier of the runner.
+                      type: string
+                    lastHeartbeat:
+                      description: LastHeartbeat represents the last time the runner
+                        connected to the Platform.
+                      format: date-time
+                      type: string
+                    name:
+                      description: |-
+                        Name represents the name of the runner to be displayed in the UI and
+                        used in the API for lookups.
+                        This field is ignored for now.
+                      type: string
+                    registeredAt:
+                      description: RegisteredAt represents the time the runner was
+                        registered with the Platform.
+                      format: date-time
+                      type: string
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: locationworkspaces.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: LocationWorkspace
+    listKind: LocationWorkspaceList
+    plural: locationworkspaces
+    singular: locationworkspace
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: LocationWorkspace is the Schema for the locationworkspaces API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: LocationWorkspaceSpec defines the desired state of LocationWorkspace
+            properties:
+              location:
+                type: string
+              workspace:
+                type: string
+            type: object
+          status:
+            description: LocationWorkspaceStatus defines the observed state of LocationWorkspace
+            properties:
+              namespace:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: personas.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: Persona
+    listKind: PersonaList
+    plural: personas
+    shortNames:
+    - pr
+    - prs
+    - rwpr
+    - rwprs
+    singular: persona
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Persona is the Schema for the Persona API
+          The user-configurable aspects of the 'AI' (ish) assistant who searches
+          and runs tasks as part of a runsession
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PersonaSpec defines the desired state of the Persona
+            properties:
+              description:
+                type: string
+              displayName:
+                type: string
+              filter:
+                description: |-
+                  PersonaFilterSpec determines how an Persona filters out tasks after a search
+                  for things it definitely shouldn't consider running
+                properties:
+                  budget:
+                    description: Defines key lifecycle events in personautils in backend-services
+                    properties:
+                      budgeLimitTrigger:
+                        description: Defines conditions that a persona evaluates in
+                          a RunSession in personautils in backend-services
+                        properties:
+                          onIssues:
+                            description: Defines functionality available in personautils
+                              in backend-services, allowing a level switch-case statment
+                            items:
+                              description: Defines functionality available in personautils
+                                in backend-services
+                              properties:
+                                addIssues:
+                                  type: boolean
+                                addNextSteps:
+                                  type: boolean
+                                addTasks:
+                                  type: boolean
+                                allIssues:
+                                  type: boolean
+                                allSafeTasks:
+                                  type: boolean
+                                askForEscalation:
+                                  type: boolean
+                                askForRefine:
+                                  type: boolean
+                                endRunSession:
+                                  type: boolean
+                                level:
+                                  type: integer
+                                minSevLevel:
+                                  type: integer
+                                setIssues:
+                                  type: boolean
+                                setNextSteps:
+                                  type: boolean
+                                setTasks:
+                                  type: boolean
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                            type: array
+                            x-kubernetes-preserve-unknown-fields: true
+                          onNoIssues:
+                            description: Defines functionality available in personautils
+                              in backend-services
+                            properties:
+                              addIssues:
+                                type: boolean
+                              addNextSteps:
+                                type: boolean
+                              addTasks:
+                                type: boolean
+                              allIssues:
+                                type: boolean
+                              allSafeTasks:
+                                type: boolean
+                              askForEscalation:
+                                type: boolean
+                              askForRefine:
+                                type: boolean
+                              endRunSession:
+                                type: boolean
+                              level:
+                                type: integer
+                              minSevLevel:
+                                type: integer
+                              setIssues:
+                                type: boolean
+                              setNextSteps:
+                                type: boolean
+                              setTasks:
+                                type: boolean
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          onNoNextSteps:
+                            description: Defines functionality available in personautils
+                              in backend-services
+                            properties:
+                              addIssues:
+                                type: boolean
+                              addNextSteps:
+                                type: boolean
+                              addTasks:
+                                type: boolean
+                              allIssues:
+                                type: boolean
+                              allSafeTasks:
+                                type: boolean
+                              askForEscalation:
+                                type: boolean
+                              askForRefine:
+                                type: boolean
+                              endRunSession:
+                                type: boolean
+                              level:
+                                type: integer
+                              minSevLevel:
+                                type: integer
+                              setIssues:
+                                type: boolean
+                              setNextSteps:
+                                type: boolean
+                              setTasks:
+                                type: boolean
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          onNoTasks:
+                            description: Defines functionality available in personautils
+                              in backend-services
+                            properties:
+                              addIssues:
+                                type: boolean
+                              addNextSteps:
+                                type: boolean
+                              addTasks:
+                                type: boolean
+                              allIssues:
+                                type: boolean
+                              allSafeTasks:
+                                type: boolean
+                              askForEscalation:
+                                type: boolean
+                              askForRefine:
+                                type: boolean
+                              endRunSession:
+                                type: boolean
+                              level:
+                                type: integer
+                              minSevLevel:
+                                type: integer
+                              setIssues:
+                                type: boolean
+                              setNextSteps:
+                                type: boolean
+                              setTasks:
+                                type: boolean
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      close:
+                        description: Defines functionality available in personautils
+                          in backend-services
+                        properties:
+                          addIssues:
+                            type: boolean
+                          addNextSteps:
+                            type: boolean
+                          addTasks:
+                            type: boolean
+                          allIssues:
+                            type: boolean
+                          allSafeTasks:
+                            type: boolean
+                          askForEscalation:
+                            type: boolean
+                          askForRefine:
+                            type: boolean
+                          endRunSession:
+                            type: boolean
+                          level:
+                            type: integer
+                          minSevLevel:
+                            type: integer
+                          setIssues:
+                            type: boolean
+                          setNextSteps:
+                            type: boolean
+                          setTasks:
+                            type: boolean
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      refine:
+                        description: Defines functionality available in personautils
+                          in backend-services
+                        properties:
+                          addIssues:
+                            type: boolean
+                          addNextSteps:
+                            type: boolean
+                          addTasks:
+                            type: boolean
+                          allIssues:
+                            type: boolean
+                          allSafeTasks:
+                            type: boolean
+                          askForEscalation:
+                            type: boolean
+                          askForRefine:
+                            type: boolean
+                          endRunSession:
+                            type: boolean
+                          level:
+                            type: integer
+                          minSevLevel:
+                            type: integer
+                          setIssues:
+                            type: boolean
+                          setNextSteps:
+                            type: boolean
+                          setTasks:
+                            type: boolean
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      start:
+                        description: Defines functionality available in personautils
+                          in backend-services
+                        properties:
+                          addIssues:
+                            type: boolean
+                          addNextSteps:
+                            type: boolean
+                          addTasks:
+                            type: boolean
+                          allIssues:
+                            type: boolean
+                          allSafeTasks:
+                            type: boolean
+                          askForEscalation:
+                            type: boolean
+                          askForRefine:
+                            type: boolean
+                          endRunSession:
+                            type: boolean
+                          level:
+                            type: integer
+                          minSevLevel:
+                            type: integer
+                          setIssues:
+                            type: boolean
+                          setNextSteps:
+                            type: boolean
+                          setTasks:
+                            type: boolean
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      stepTrigger:
+                        description: Defines conditions that a persona evaluates in
+                          a RunSession in personautils in backend-services
+                        properties:
+                          onIssues:
+                            description: Defines functionality available in personautils
+                              in backend-services, allowing a level switch-case statment
+                            items:
+                              description: Defines functionality available in personautils
+                                in backend-services
+                              properties:
+                                addIssues:
+                                  type: boolean
+                                addNextSteps:
+                                  type: boolean
+                                addTasks:
+                                  type: boolean
+                                allIssues:
+                                  type: boolean
+                                allSafeTasks:
+                                  type: boolean
+                                askForEscalation:
+                                  type: boolean
+                                askForRefine:
+                                  type: boolean
+                                endRunSession:
+                                  type: boolean
+                                level:
+                                  type: integer
+                                minSevLevel:
+                                  type: integer
+                                setIssues:
+                                  type: boolean
+                                setNextSteps:
+                                  type: boolean
+                                setTasks:
+                                  type: boolean
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                            type: array
+                            x-kubernetes-preserve-unknown-fields: true
+                          onNoIssues:
+                            description: Defines functionality available in personautils
+                              in backend-services
+                            properties:
+                              addIssues:
+                                type: boolean
+                              addNextSteps:
+                                type: boolean
+                              addTasks:
+                                type: boolean
+                              allIssues:
+                                type: boolean
+                              allSafeTasks:
+                                type: boolean
+                              askForEscalation:
+                                type: boolean
+                              askForRefine:
+                                type: boolean
+                              endRunSession:
+                                type: boolean
+                              level:
+                                type: integer
+                              minSevLevel:
+                                type: integer
+                              setIssues:
+                                type: boolean
+                              setNextSteps:
+                                type: boolean
+                              setTasks:
+                                type: boolean
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          onNoNextSteps:
+                            description: Defines functionality available in personautils
+                              in backend-services
+                            properties:
+                              addIssues:
+                                type: boolean
+                              addNextSteps:
+                                type: boolean
+                              addTasks:
+                                type: boolean
+                              allIssues:
+                                type: boolean
+                              allSafeTasks:
+                                type: boolean
+                              askForEscalation:
+                                type: boolean
+                              askForRefine:
+                                type: boolean
+                              endRunSession:
+                                type: boolean
+                              level:
+                                type: integer
+                              minSevLevel:
+                                type: integer
+                              setIssues:
+                                type: boolean
+                              setNextSteps:
+                                type: boolean
+                              setTasks:
+                                type: boolean
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          onNoTasks:
+                            description: Defines functionality available in personautils
+                              in backend-services
+                            properties:
+                              addIssues:
+                                type: boolean
+                              addNextSteps:
+                                type: boolean
+                              addTasks:
+                                type: boolean
+                              allIssues:
+                                type: boolean
+                              allSafeTasks:
+                                type: boolean
+                              askForEscalation:
+                                type: boolean
+                              askForRefine:
+                                type: boolean
+                              endRunSession:
+                                type: boolean
+                              level:
+                                type: integer
+                              minSevLevel:
+                                type: integer
+                              setIssues:
+                                type: boolean
+                              setNextSteps:
+                                type: boolean
+                              setTasks:
+                                type: boolean
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      update:
+                        description: Defines functionality available in personautils
+                          in backend-services
+                        properties:
+                          addIssues:
+                            type: boolean
+                          addNextSteps:
+                            type: boolean
+                          addTasks:
+                            type: boolean
+                          allIssues:
+                            type: boolean
+                          allSafeTasks:
+                            type: boolean
+                          askForEscalation:
+                            type: boolean
+                          askForRefine:
+                            type: boolean
+                          endRunSession:
+                            type: boolean
+                          level:
+                            type: integer
+                          minSevLevel:
+                            type: integer
+                          setIssues:
+                            type: boolean
+                          setNextSteps:
+                            type: boolean
+                          setTasks:
+                            type: boolean
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  codebundlePathToRobot:
+                    items:
+                      type: string
+                    type: array
+                  codebundleRef:
+                    items:
+                      type: string
+                    type: array
+                  codebundleRepoUrl:
+                    items:
+                      type: string
+                    type: array
+                  codebundleTaskDoc:
+                    items:
+                      type: string
+                    type: array
+                  codebundleTaskTags:
+                    items:
+                      type: string
+                    type: array
+                  codecollectionShorthash:
+                    items:
+                      type: string
+                    type: array
+                  resolvedTitle:
+                    items:
+                      type: string
+                    type: array
+                  slxAlias:
+                    items:
+                      type: string
+                    type: array
+                  slxGroup:
+                    items:
+                      type: string
+                    type: array
+                  slxName:
+                    items:
+                      type: string
+                    type: array
+                  slxTags:
+                    items:
+                      type: string
+                    type: array
+                  stopWords:
+                    items:
+                      type: string
+                    type: array
+                    
+                  unresolvedTitle:
+                    items:
+                      type: string
+                    type: array
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              run:
+                description: |-
+                  PersonaRunSpec determines how an Persona runs tasks after a search,
+                  currently empty but envisioned down the line for areas like which service account to use
+                properties:
+                  allow:
+                    properties:
+                      users:
+                        items:
+                          properties:
+                            email:
+                              type: string
+                            id:
+                              type: integer
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        type: array
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  disallow:
+                    properties:
+                      users:
+                        items:
+                          properties:
+                            email:
+                              type: string
+                            id:
+                              type: integer
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        type: array
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  useServiceAccount:
+                    description: |-
+                      The ID (email address form) of a service account to use when creating runrequests, or
+                      leave unspecified to use the default service account (not currently implented)
+                    type: string
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: PersonaStatus defines the observed state of an Persona
+            properties:
+              validation:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Validation tracks warnings/errors if this persona references tasks or tags
+                  on an allowlist/denylist that don't exist in this workspace.  The keys should be the
+                  name of a key in this configuration, the values should be human-readable notes on why
+                  it is a config error or warning
+                type: object
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: repositories.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: Repository
+    listKind: RepositoryList
+    plural: repositories
+    shortNames:
+    - repo
+    - repos
+    singular: repository
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: Repository is the Schema for the repositories API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              GitRepositorySpec specifies the required configuration to produce an
+              Artifact for a Git repository.
+            properties:
+              ignore:
+                description: |-
+                  Ignore overrides the set of excluded patterns in the .sourceignore format
+                  (which is the same as .gitignore). If not provided, a default will be used,
+                  consult the documentation for your version to find out what those are.
+                type: string
+              include:
+                description: |-
+                  Include specifies a list of GitRepository resources which Artifacts
+                  should be included in the Artifact produced for this GitRepository.
+                items:
+                  description: |-
+                    GitRepositoryInclude specifies a local reference to a GitRepository which
+                    Artifact (sub-)contents must be included, and where they should be placed.
+                  properties:
+                    fromPath:
+                      description: |-
+                        FromPath specifies the path to copy contents from, defaults to the root
+                        of the Artifact.
+                      type: string
+                    repository:
+                      description: |-
+                        GitRepositoryRef specifies the GitRepository which Artifact contents
+                        must be included.
+                      properties:
+                        name:
+                          description: Name of the referent.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    toPath:
+                      description: |-
+                        ToPath specifies the path to copy contents to, defaults to the name of
+                        the GitRepositoryRef.
+                      type: string
+                  required:
+                  - repository
+                  type: object
+                type: array
+              interval:
+                description: Interval at which to check the GitRepository for updates.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                type: string
+              recurseSubmodules:
+                description: |-
+                  RecurseSubmodules enables the initialization of all submodules within
+                  the GitRepository as cloned from the URL, using their default settings.
+                type: boolean
+              ref:
+                description: |-
+                  Reference specifies the Git reference to resolve and monitor for
+                  changes, defaults to the 'master' branch.
+                properties:
+                  branch:
+                    description: Branch to check out, defaults to 'master' if no other
+                      field is defined.
+                    type: string
+                  commit:
+                    description: |-
+                      Commit SHA to check out, takes precedence over all reference fields.
+
+
+                      This can be combined with Branch to shallow clone the branch, in which
+                      the commit is expected to exist.
+                    type: string
+                  name:
+                    description: |-
+                      Name of the reference to check out; takes precedence over Branch, Tag and SemVer.
+
+
+                      It must be a valid Git reference: https://git-scm.com/docs/git-check-ref-format#_description
+                      Examples: "refs/heads/main", "refs/tags/v0.1.0", "refs/pull/420/head", "refs/merge-requests/1/head"
+                    type: string
+                  semver:
+                    description: SemVer tag expression to check out, takes precedence
+                      over Tag.
+                    type: string
+                  tag:
+                    description: Tag to check out, takes precedence over Branch.
+                    type: string
+                type: object
+              secretRef:
+                description: |-
+                  SecretRef specifies the Secret containing authentication credentials for
+                  the GitRepository.
+                  For HTTPS repositories the Secret must contain 'username' and 'password'
+                  fields for basic auth or 'bearerToken' field for token auth.
+                  For SSH repositories the Secret must contain 'identity'
+                  and 'known_hosts' fields.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - name
+                type: object
+              suspend:
+                description: |-
+                  Suspend tells the controller to suspend the reconciliation of this
+                  GitRepository.
+                type: boolean
+              timeout:
+                default: 60s
+                description: Timeout for Git operations like cloning, defaults to
+                  60s.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
+                type: string
+              url:
+                description: URL specifies the Git repository URL, it can be an HTTP/S
+                  or SSH address.
+                pattern: ^(http|https|ssh)://.*$
+                type: string
+              verify:
+                description: |-
+                  Verification specifies the configuration to verify the Git commit
+                  signature(s).
+                properties:
+                  mode:
+                    description: Mode specifies what Git object should be verified,
+                      currently ('head').
+                    enum:
+                    - head
+                    type: string
+                  secretRef:
+                    description: |-
+                      SecretRef specifies the Secret containing the public keys of trusted Git
+                      authors.
+                    properties:
+                      name:
+                        description: Name of the referent.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - mode
+                - secretRef
+                type: object
+            required:
+            - interval
+            - url
+            type: object
+          status:
+            description: GitRepositoryStatus records the observed state of a Git repository.
+            properties:
+              artifact:
+                description: Artifact represents the last successful GitRepository
+                  reconciliation.
+                properties:
+                  digest:
+                    description: Digest is the digest of the file in the form of '<algorithm>:<checksum>'.
+                    pattern: ^[a-z0-9]+(?:[.+_-][a-z0-9]+)*:[a-zA-Z0-9=_-]+$
+                    type: string
+                  lastUpdateTime:
+                    description: |-
+                      LastUpdateTime is the timestamp corresponding to the last update of the
+                      Artifact.
+                    format: date-time
+                    type: string
+                  metadata:
+                    additionalProperties:
+                      type: string
+                    description: Metadata holds upstream information such as OCI annotations.
+                    type: object
+                  path:
+                    description: |-
+                      Path is the relative file path of the Artifact. It can be used to locate
+                      the file in the root of the Artifact storage on the local file system of
+                      the controller managing the Source.
+                    type: string
+                  revision:
+                    description: |-
+                      Revision is a human-readable identifier traceable in the origin source
+                      system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.
+                    type: string
+                  size:
+                    description: Size is the number of bytes in the file.
+                    format: int64
+                    type: integer
+                  url:
+                    description: |-
+                      URL is the HTTP address of the Artifact as exposed by the controller
+                      managing the Source. It can be used to retrieve the Artifact for
+                      consumption, e.g. by another controller applying the Artifact contents.
+                    type: string
+                required:
+                - lastUpdateTime
+                - path
+                - revision
+                - url
+                type: object
+              conditions:
+                description: Conditions holds the conditions for the GitRepository.
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              includedArtifacts:
+                description: |-
+                  IncludedArtifacts contains a list of the last successfully included
+                  Artifacts as instructed by GitRepositorySpec.Include.
+                items:
+                  description: Artifact represents the output of a Source reconciliation.
+                  properties:
+                    digest:
+                      description: Digest is the digest of the file in the form of
+                        '<algorithm>:<checksum>'.
+                      pattern: ^[a-z0-9]+(?:[.+_-][a-z0-9]+)*:[a-zA-Z0-9=_-]+$
+                      type: string
+                    lastUpdateTime:
+                      description: |-
+                        LastUpdateTime is the timestamp corresponding to the last update of the
+                        Artifact.
+                      format: date-time
+                      type: string
+                    metadata:
+                      additionalProperties:
+                        type: string
+                      description: Metadata holds upstream information such as OCI
+                        annotations.
+                      type: object
+                    path:
+                      description: |-
+                        Path is the relative file path of the Artifact. It can be used to locate
+                        the file in the root of the Artifact storage on the local file system of
+                        the controller managing the Source.
+                      type: string
+                    revision:
+                      description: |-
+                        Revision is a human-readable identifier traceable in the origin source
+                        system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.
+                      type: string
+                    size:
+                      description: Size is the number of bytes in the file.
+                      format: int64
+                      type: integer
+                    url:
+                      description: |-
+                        URL is the HTTP address of the Artifact as exposed by the controller
+                        managing the Source. It can be used to retrieve the Artifact for
+                        consumption, e.g. by another controller applying the Artifact contents.
+                      type: string
+                  required:
+                  - lastUpdateTime
+                  - path
+                  - revision
+                  - url
+                  type: object
+                type: array
+              lastHandledReconcileAt:
+                description: |-
+                  LastHandledReconcileAt holds the value of the most recent
+                  reconcile request value, so a change of the annotation value
+                  can be detected.
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the last observed generation of the GitRepository
+                  object.
+                format: int64
+                type: integer
+              observedIgnore:
+                description: |-
+                  ObservedIgnore is the observed exclusion patterns used for constructing
+                  the source artifact.
+                type: string
+              observedInclude:
+                description: |-
+                  ObservedInclude is the observed list of GitRepository resources used to
+                  produce the current Artifact.
+                items:
+                  description: |-
+                    GitRepositoryInclude specifies a local reference to a GitRepository which
+                    Artifact (sub-)contents must be included, and where they should be placed.
+                  properties:
+                    fromPath:
+                      description: |-
+                        FromPath specifies the path to copy contents from, defaults to the root
+                        of the Artifact.
+                      type: string
+                    repository:
+                      description: |-
+                        GitRepositoryRef specifies the GitRepository which Artifact contents
+                        must be included.
+                      properties:
+                        name:
+                          description: Name of the referent.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    toPath:
+                      description: |-
+                        ToPath specifies the path to copy contents to, defaults to the name of
+                        the GitRepositoryRef.
+                      type: string
+                  required:
+                  - repository
+                  type: object
+                type: array
+              observedRecurseSubmodules:
+                description: |-
+                  ObservedRecurseSubmodules is the observed resource submodules
+                  configuration used to produce the current Artifact.
+                type: boolean
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: runbooks.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: Runbook
+    listKind: RunbookList
+    plural: runbooks
+    shortNames:
+    - rb
+    - rbs
+    - rwrb
+    - rwrbs
+    singular: runbook
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.location
+      name: LocationName
+      type: string
+    - jsonPath: .status.codeCollection
+      name: CodeCollection
+      type: string
+    - jsonPath: .spec.codeBundle.ref
+      name: CodeBundleRef
+      type: string
+    - jsonPath: .status.imageTag
+      name: ImageTag
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: Runbook is the Schema for the runbooks API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RunbookSpec defines the desired state of Runbook
+            properties:
+              codeBundle:
+                properties:
+                  pathToRobot:
+                    description: Path to the robot file to be executed within the
+                      CodeCollection.
+                    type: string
+                  ref:
+                    default: main
+                    description: Ref defined the git ref to pull the robot files from.
+                    type: string
+                  repoUrl:
+                    description: RepoURL (repoUrl) defines the git repository URL
+                      for the CodeBundle.
+                    type: string
+                required:
+                - pathToRobot
+                - ref
+                - repoUrl
+                type: object
+              configProvided:
+                items:
+                  properties:
+                    name:
+                      type: string
+                    value:
+                      type: string
+                    valueFrom:
+                      properties:
+                        slx:
+                          type: string
+                        workspace:
+                          type: string
+                      type: object
+                  type: object
+                type: array
+              location:
+                type: string
+              requirements:
+                items:
+                  properties:
+                    loadSecondaryDependencies:
+                      default: false
+                      type: boolean
+                    lockFile:
+                      type: string
+                    pip:
+                      default: requirements.txt
+                      type: string
+                    platform:
+                      items:
+                        type: string
+                      type: array
+                    pypi:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - loadSecondaryDependencies
+                  - pip
+                  type: object
+                type: array
+              secretsProvided:
+                items:
+                  description: SecretsProvided
+                  properties:
+                    name:
+                      description: Name of the secret provided that matches up with
+                        the request from the robot author
+                      type: string
+                    workspaceKey:
+                      description: Key of the workspace secret to be used
+                      type: string
+                  type: object
+                type: array
+              servicesProvided:
+                items:
+                  properties:
+                    locationServiceName:
+                      description: |-
+                        Name as it appears in the workspaceLocationServices or shared location services,
+                        should be <service_name>.shared for a shared service, <service_name> for a
+                        workspace service
+                      type: string
+                    name:
+                      description: Name from the robot file, will also translate in
+                        to the env var setting this
+                      type: string
+                  required:
+                  - locationServiceName
+                  - name
+                  type: object
+                type: array
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: RunbookStatus defines the observed state of Runbook.
+            properties:
+              codeBundle:
+                description: CodeBundle
+                properties:
+                  pathToRobot:
+                    description: Path to the robot file to be executed within the
+                      CodeCollection.
+                    type: string
+                  ref:
+                    default: main
+                    description: Ref defined the git ref to pull the robot files from.
+                    type: string
+                  repoUrl:
+                    description: RepoURL (repoUrl) defines the git repository URL
+                      for the CodeBundle.
+                    type: string
+                  taskDetails:
+                    additionalProperties:
+                      properties:
+                        tags:
+                          type: string
+                      required:
+                      - tags
+                      type: object
+                    description: Task title to task details map
+                    type: object
+                  tasks:
+                    description: Tasks to be displayed on the map page.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - pathToRobot
+                - ref
+                - repoUrl
+                - taskDetails
+                - tasks
+                type: object
+              codeCollection:
+                description: CodeCollection is the name of the CodeCollection containing
+                  the desired CodeBundle.
+                type: string
+              image:
+                description: Image represents the path to the container image repository.
+                type: string
+              imageTag:
+                description: ImageTag repesents the tag of the image within the container
+                  image repository.
+                type: string
+              lastConfigVersion:
+                description: LastConfigVersion is the last reconciled version of the
+                  config hashed
+                type: string
+              lastRunRequest:
+                description: |-
+                  LastRunRequest is the last request
+                  Deprecated: use RunnerLocations instead
+                properties:
+                  accessToken:
+                    type: string
+                  runRequestId:
+                    format: int64
+                    type: integer
+                  runSessionId:
+                    format: int64
+                    type: integer
+                  taskTitles:
+                    items:
+                      type: string
+                    type: array
+                  time:
+                    format: date-time
+                    type: string
+                  username:
+                    type: string
+                type: object
+              locations:
+                description: |-
+                  Locations for the Runbook to be deployed to.
+                  Deprecated: use RunnerLocations instead
+                items:
+                  type: string
+                type: array
+              runnerLocations:
+                description: RunnerLocations is a list of runners that are used to
+                  run the Runbook
+                items:
+                  description: RunnerLocation is a list of runners that are used to
+                    run the Runbook.
+                  properties:
+                    lastUpdated:
+                      description: LastUpdated is the last time the runner sent a
+                        status update
+                      format: date-time
+                      type: string
+                    location:
+                      description: Location is the location name where the runner
+                        is running
+                      type: string
+                    locationUUID:
+                      description: LocationUUID is the UUID of the location where
+                        the runner is running
+                      type: string
+                    status:
+                      description: Status is the status of the runner
+                      properties:
+                        code:
+                          description: Code is the code that is returned from the
+                            runner regarding this CronRun/CronCodeRun's status
+                          type: string
+                        id:
+                          description: ID is the name of CronRun/CronCodeRun that
+                            is being run in the remote location
+                          type: string
+                        message:
+                          description: Message is the message that is returned from
+                            the runner regarding this CronRun/CronCodeRun's status
+                          type: string
+                        name:
+                          description: CronRun/CronCodeRun is the name of the Runbook/SLI
+                            that is being run in the remote location
+                          type: string
+                        version:
+                          description: Version is the version of the Runbook/SLI that
+                            is being run in the remote location
+                          type: string
+                      type: object
+                  type: object
+                type: array
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: slis.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: ServiceLevelIndicator
+    listKind: ServiceLevelIndicatorList
+    plural: slis
+    shortNames:
+    - rwsli
+    - rwslis
+    singular: servicelevelindicator
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.codeCollection
+      name: CodeCollection
+      type: string
+    - jsonPath: .spec.codeBundle.ref
+      name: CodeBundleRef
+      type: string
+    - jsonPath: .status.imageTag
+      name: ImageTag
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: ServiceLevelIndicator is the Schema for the slis API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ServiceLevelIndicatorSpec defines the desired state of ServiceLevelIndicator.
+            properties:
+              alertConfig:
+                description: |-
+                  AlertConfig is the configuration for the alert like actions to be taken when the alert is triggered.
+                  Currently only supports task runs when the alert is triggered.
+                properties:
+                  tasks:
+                    properties:
+                      persona:
+                        type: string
+                      sessionTTL:
+                        description: SessionTTL is the session TTL of the runsession
+                          before another task run is triggered.
+                        type: string
+                    type: object
+                type: object
+              alerts:
+                additionalProperties:
+                  description: ThresholdAlertSpec is the specification for a threshold
+                    alert.
+                  properties:
+                    for:
+                      description: For how long the threshold must be breached before
+                        the alert is triggered.
+                      type: string
+                    operator:
+                      description: Operator is the operator used to compare the threshold
+                        value to the actual value.
+                      type: string
+                    threshold:
+                      description: Threshold is the value that the actual value is
+                        compared to using the specified operator.
+                      type: string
+                  required:
+                  - operator
+                  - threshold
+                  type: object
+                description: ThresholdAlerts is a map of alert severities to alert
+                  specifications.
+                type: object
+              codeBundle:
+                properties:
+                  pathToRobot:
+                    description: Path to the robot file to be executed within the
+                      CodeCollection.
+                    type: string
+                  ref:
+                    default: main
+                    description: Ref defined the git ref to pull the robot files from.
+                    type: string
+                  repoUrl:
+                    description: RepoURL (repoUrl) defines the git repository URL
+                      for the CodeBundle.
+                    type: string
+                required:
+                - pathToRobot
+                - ref
+                - repoUrl
+                type: object
+              configProvided:
+                items:
+                  properties:
+                    name:
+                      type: string
+                    value:
+                      type: string
+                    valueFrom:
+                      properties:
+                        slx:
+                          type: string
+                        workspace:
+                          type: string
+                      type: object
+                  type: object
+                type: array
+              displayUnitsLong:
+                type: string
+              displayUnitsShort:
+                maxLength: 3
+                type: string
+              intervalSeconds:
+                default: 60
+                type: integer
+              intervalStrategy:
+                default: intermezzo
+                type: string
+              locations:
+                items:
+                  type: string
+                type: array
+              secretsProvided:
+                items:
+                  description: SecretsProvided
+                  properties:
+                    name:
+                      description: Name of the secret provided that matches up with
+                        the request from the robot author
+                      type: string
+                    workspaceKey:
+                      description: Key of the workspace secret to be used
+                      type: string
+                  type: object
+                type: array
+              servicesProvided:
+                items:
+                  properties:
+                    locationServiceName:
+                      description: |-
+                        Name as it appears in the workspaceLocationServices or shared location services,
+                        should be <service_name>.shared for a shared service, <service_name> for a
+                        workspace service
+                      type: string
+                    name:
+                      description: Name from the robot file, will also translate in
+                        to the env var setting this
+                      type: string
+                  required:
+                  - locationServiceName
+                  - name
+                  type: object
+                type: array
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: ServiceLevelIndicatorStatus defines the observed state of
+              ServiceLevelIndicator.
+            properties:
+              alertConfig:
+                description: AlertConfig is the status of the alert config.
+                properties:
+                  taskAlertStatus:
+                    additionalProperties:
+                      description: ThresholdAlertStatus is the status of a specified
+                        threshold alert severity configuration.
+                      properties:
+                        createdAt:
+                          description: CreatedAt is the time the alert rules were
+                            created.
+                          type: string
+                        expr:
+                          description: Expr is the expression used to evaluate the
+                            alert.
+                          type: string
+                        for:
+                          description: For is the duration for which the condition
+                            must be true before alerting.
+                          type: string
+                        mode:
+                          description: Mode is the mode of the alert.
+                          type: string
+                        updatedAt:
+                          description: UpdatedAt is the time the alert rules were
+                            last updated.
+                          type: string
+                      type: object
+                    description: TaskAlertStatus is the status of the task alert.
+                    type: object
+                  tasks:
+                    properties:
+                      persona:
+                        type: string
+                      sessionTTL:
+                        description: SessionTTL is the session TTL of the runsession
+                          before another task run is triggered.
+                        type: string
+                    type: object
+                type: object
+              alerts:
+                additionalProperties:
+                  description: ThresholdAlertStatus is the status of a specified threshold
+                    alert severity configuration.
+                  properties:
+                    createdAt:
+                      description: CreatedAt is the time the alert rules were created.
+                      type: string
+                    expr:
+                      description: Expr is the expression used to evaluate the alert.
+                      type: string
+                    for:
+                      description: For is the duration for which the condition must
+                        be true before alerting.
+                      type: string
+                    mode:
+                      description: Mode is the mode of the alert.
+                      type: string
+                    updatedAt:
+                      description: UpdatedAt is the time the alert rules were last
+                        updated.
+                      type: string
+                  type: object
+                description: Alerts is the status of the alert rules.
+                type: object
+              codeBundleError:
+                description: A troubleshooting field that is present if the CodeBundle
+                  in the spec was unusable
+                type: string
+              codeCollection:
+                description: CodeCollection is the name of the CodeCollection containing
+                  the desired CodeBundle.
+                type: string
+              image:
+                description: Image represents the path to the container image repository.
+                type: string
+              imageTag:
+                description: ImageTag repesents the tag of the image within the container
+                  image repository.
+                type: string
+              lastConfigVersion:
+                description: LastConfigVersion is the last reconciled version of the
+                  config hashed.
+                type: string
+              locations:
+                description: |-
+                  Locations is a list of locations where the SLI is being monitored.
+                  Deprecated: use RunnerLocations instead
+                items:
+                  type: string
+                type: array
+              runnerLocations:
+                description: RunnerLocations is a list of runners that are used to
+                  run the SLI
+                items:
+                  description: RunnerLocation is a list of runners that are used to
+                    run the Runbook.
+                  properties:
+                    lastUpdated:
+                      description: LastUpdated is the last time the runner sent a
+                        status update
+                      format: date-time
+                      type: string
+                    location:
+                      description: Location is the location name where the runner
+                        is running
+                      type: string
+                    locationUUID:
+                      description: LocationUUID is the UUID of the location where
+                        the runner is running
+                      type: string
+                    status:
+                      description: Status is the status of the runner
+                      properties:
+                        code:
+                          description: Code is the code that is returned from the
+                            runner regarding this CronRun/CronCodeRun's status
+                          type: string
+                        id:
+                          description: ID is the name of CronRun/CronCodeRun that
+                            is being run in the remote location
+                          type: string
+                        message:
+                          description: Message is the message that is returned from
+                            the runner regarding this CronRun/CronCodeRun's status
+                          type: string
+                        name:
+                          description: CronRun/CronCodeRun is the name of the Runbook/SLI
+                            that is being run in the remote location
+                          type: string
+                        version:
+                          description: Version is the version of the Runbook/SLI that
+                            is being run in the remote location
+                          type: string
+                      type: object
+                  type: object
+                type: array
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: slos.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: ServiceLevelObjective
+    listKind: ServiceLevelObjectiveList
+    plural: slos
+    shortNames:
+    - rwslo
+    - rwslos
+    singular: servicelevelobjective
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.objective
+      name: Objective
+      type: string
+    - jsonPath: .spec.threshold
+      name: Threshold
+      type: string
+    - jsonPath: .spec.operand
+      name: Operand
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: ServiceLevelObjective is the Schema for the slos API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ServiceLevelObjectiveSpec defines the desired state of ServiceLevelObjective
+            properties:
+              codeBundle:
+                properties:
+                  pathToYaml:
+                    description: Path to the queries.yaml file to be executed within
+                      the CodeCollection.
+                    type: string
+                  ref:
+                    default: main
+                    description: Ref defined the git ref to pull the robot files from.
+                    type: string
+                  repoUrl:
+                    description: RepoURL (repoUrl) defines the git repository URL
+                      for the QueryBundle.
+                    type: string
+                required:
+                - pathToYaml
+                - ref
+                - repoUrl
+                type: object
+              objective:
+                type: number
+              operand:
+                description: 'TODO: Add enum to allow only "lt", "gt", "eq" and "neq"'
+                type: string
+              slxSpecType:
+                description: 'TODO: Add enum "simple-mwmb"'
+                type: string
+              threshold:
+                type: number
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: ServiceLevelObjectiveStatus defines the observed state of
+              ServiceLevelObjective
+            properties:
+              generation:
+                format: int64
+                type: integer
+              generationChecksum:
+                type: string
+              ruleGroups:
+                properties:
+                  failed:
+                    items:
+                      type: string
+                    type: array
+                  installed:
+                    items:
+                      type: string
+                    type: array
+                type: object
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: slxs.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: ServiceLevelX
+    listKind: ServiceLevelXList
+    plural: slxs
+    shortNames:
+    - slx
+    - rwslx
+    - rwslxs
+    singular: servicelevelx
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.alias
+      name: Alias
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: ServiceLevelX is the Schema for the slxs API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ServiceLevelXSpec defines the desired state of ServiceLevelX
+            properties:
+              alias:
+                type: string
+              asMeasuredBy:
+                type: string
+              attachedTo:
+                description: |-
+                  This SLX is attached to another SLX in this workspace,
+                  typically rendered next to it on a map
+                properties:
+                  slx:
+                    description: The name of an SLX to which this is attached
+                    pattern: \w+
+                    type: string
+                type: object
+              configProvided:
+                items:
+                  properties:
+                    name:
+                      description: Name where this can be accessed from within robot
+                        code, alphanumeric and underscores only
+                      pattern: \w+
+                      type: string
+                    value:
+                      description: A static value for this variable provided in this
+                        file, alternatively use valueFrom
+                      type: string
+                    valueFrom:
+                      description: Fetches a value for this variable from outside
+                        .spec.configProvided[*]
+                      properties:
+                        secret:
+                          type: string
+                        workspace:
+                          type: string
+                      type: object
+                  type: object
+                type: array
+              displayName:
+                type: string
+              icon:
+                type: string
+              linksTo:
+                description: This SLX links to another workspace/map
+                properties:
+                  command:
+                    description: |-
+                      The command to run in the map when this workspace opens, defaults
+                      to empty here with behavior of "get workspace"
+                    type: string
+                  org:
+                    description: A reference to the organization where the workspace
+                      below can be found
+                    pattern: \w+
+                    type: string
+                  workspace:
+                    description: The name of a workspace where this reference applies
+                    pattern: \w+
+                    type: string
+                type: object
+              owners:
+                items:
+                  type: string
+                type: array
+              statement:
+                type: string
+              tags:
+                items:
+                  description: SLXTag defines a label for a group of SLXs.
+                  properties:
+                    name:
+                      description: The key for this key/value pair
+                      pattern: \w+
+                      type: string
+                    value:
+                      description: The value for this key/value pair
+                      pattern: \w+
+                      type: string
+                  type: object
+                type: array
+            required:
+            - owners
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: ServiceLevelXStatus defines the observed state of ServiceLevelX
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: tutorials.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: Tutorial
+    listKind: TutorialList
+    plural: tutorials
+    shortNames:
+    - tut
+    - tuts
+    - rwtut
+    - rwtuts
+    singular: tutorial
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Tutorial is the schema for a tutorial through the
+          user's workspace
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PersonaSpec defines the desired state of the Persona
+            properties:
+              snippetText:
+                type: string
+              steps:
+                items:
+                  description: |-
+                    TutorialStepSpec is used for each atomic step in a tutorial, with wait times in between.
+                    Each field here should be optional, and assumed to start execution in parallel
+                    (modulo the special case of waitBefore / waitAfter)
+                  properties:
+                    command:
+                      description: If a command should be auto-typed in to the command
+                        bar
+                      type: string
+                    message:
+                      description: |-
+                        If a message should be shown in a modal.  The only strictly required field
+                        is the message.  The others are optional.  This will only show an "ok" button.
+                        Note that backticks should be respected in the message
+                      type: string
+                    messageImageURL:
+                      type: string
+                    messageTitle:
+                      type: string
+                    selectSlx:
+                      description: If a specific SLX should be selected, use this
+                        (fully qualified name)
+                      type: string
+                    waitAfterMilliseconds:
+                      description: How long to wait before/after executing this step,
+                        in milliseconds
+                      type: integer
+                    waitBeforeMilliseconds:
+                      type: integer
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              subtitle:
+                type: string
+              title:
+                type: string
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: TutorialStatus defines the observed state of an Tutorial
+            properties:
+              validation:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Validation should eventually warnings/errors if this tutorial references SLXs or groups
+                  that don't exist.  (I'm not sure how much else we can validate.)
+                type: object
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: workflows.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: Workflow
+    listKind: WorkflowList
+    plural: workflows
+    shortNames:
+    - wf
+    - wfs
+    - rwfs
+    - rwfs
+    singular: workflow
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: Action is the Schema for the workspace actions API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: WorkflowSpec defines the desired state of a Workflow
+            properties:
+              fromActivities:
+                items:
+                  properties:
+                    actions:
+                      description: List of actions to run when the on section is matched
+                      items:
+                        properties:
+                          email:
+                            properties:
+                              template:
+                                pattern: ^(workspace|shared)\/\w+
+                                type: string
+                              to:
+                                items:
+                                  type: string
+                                type: array
+                            type: object
+                          googleChat:
+                            properties:
+                              template:
+                                pattern: ^(workspace|shared)\/\w+
+                                type: string
+                              webhookURL:
+                                type: string
+                            required:
+                            - webhookURL
+                            type: object
+                          slackBot:
+                            properties:
+                              slackToken:
+                                type: string
+                            type: object
+                          slackRunBot:
+                            properties:
+                              channelId:
+                                type: string
+                              slackToken:
+                                type: string
+                              template:
+                                pattern: ^(workspace|shared)\/\w+
+                                type: string
+                              templateType:
+                                enum:
+                                - blocks
+                                - text
+                                type: string
+                            type: object
+                          tasks:
+                            description: |-
+                              I'm not sure how to implement any good "one of" validation
+                              here without losing other validation, though the intent
+                              is that the ActionSpec has only one of these.
+                              (Tried with map and MaxProperties)
+                            properties:
+                              dependsOnPast:
+                                default: false
+                                type: boolean
+                              filterRunSessionSelfStart:
+                                default: true
+                                description: |-
+                                  By default, tasks in workflows won't run if the verb is RUNSESSION_STARTED
+                                  and the session was created by this flow, otherwise in the common case for this
+                                  verb they run twice.  This flag over-rides that... a corner case.
+                                type: boolean
+                              force:
+                                default: false
+                                description: |-
+                                  By default, the tasks in a runrequest will only
+                                  be run once per session.  Use this flag to override this behavior, re-running
+                                  them every time they are requested.
+                                type: boolean
+                              persona:
+                                description: The Persona name that will follow up
+                                  on issues tasks raise
+                                type: string
+                              sessionTTL:
+                                default: 8h
+                                description: |-
+                                  Set to true if this runrequest should wait for previous ones to complete
+                                  before running
+                                type: string
+                              slx:
+                                description: The full (k8s) name of the slx where
+                                  the tasks can be found
+                                type: string
+                              titles:
+                                description: |-
+                                  An array of titles (strings) represnting the tasks to be run, or the special value of '*'
+                                  (the default) to run all titles in the slx's TaskSet
+                                items:
+                                  type: string
+                                type: array
+                            required:
+                            - slx
+                            type: object
+                        type: object
+                      type: array
+                    description:
+                      type: string
+                    displayName:
+                      type: string
+                    match:
+                      description: Matching criteria for when to run this Workflow
+                      properties:
+                        activityVerbs:
+                          description: The verbs to be matched, or set to None to
+                            match all
+                          items:
+                            type: string
+                          type: array
+                        slxs:
+                          description: The slxs to be matched (if the verb supports
+                            it, otherwise specifying this defaults to no match)
+                          items:
+                            type: string
+                          type: array
+                      type: object
+                    name:
+                      type: string
+                  required:
+                  - description
+                  - displayName
+                  - name
+                  type: object
+                type: array
+            required:
+            - fromActivities
+            type: object
+          status:
+            description: WorkflowStatus defines the observed state of a Workflow,
+              notably validation status
+            properties:
+              secretCreatedAt:
+                format: date-time
+                type: string
+              secretReadByUser:
+                type: boolean
+              webhookId:
+                type: string
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.15.0
+  name: workspaces.runwhen.com
+spec:
+  group: runwhen.com
+  names:
+    kind: Workspace
+    listKind: WorkspaceList
+    plural: workspaces
+    shortNames:
+    - ws
+    - wss
+    - rwws
+    - rwwss
+    singular: workspace
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.lastAvailableRevision
+      name: LastAvailableRevision
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: Workspace is the Schema for the workspaces API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: The user-configurable aspects of a workspace
+            properties:
+              alias:
+                description: Alias is an alternative name for the workspace for display
+                  purposes
+                type: string
+              configProvided:
+                description: A set of static key/value pairs that can be used by slx's
+                  slis and runbooks as configured / imported variables
+                items:
+                  properties:
+                    name:
+                      description: The name where this can be accessed from within
+                        robot code, alphanumeric and underscores only
+                      pattern: \w+
+                      type: string
+                    value:
+                      description: A static value for this variable provided in this
+                        file, alternatively use valueFrom
+                      type: string
+                  required:
+                  - name
+                  - value
+                  type: object
+                type: array
+              description:
+                description: Description is a description of the workspace
+                type: string
+              enabledLocations:
+                description: A list of location names where slis and runbooks for
+                  this workspace can run
+                items:
+                  type: string
+                type: array
+              permissions:
+                description: A list of objects with users and roles allowed to access
+                  this workspace
+                items:
+                  description: A user permissions object granting the user access
+                    to this workspace
+                  properties:
+                    group:
+                      description: An alternative to specifying the user directly
+                        (not implemented yet)
+                      type: string
+                    role:
+                      description: Roles that users/groups can play in editing and
+                        running this workspace
+                      enum:
+                      - admin
+                      - readwrite
+                      - readandrun
+                      - readandrunwithassistant
+                      - readonly
+                      type: string
+                    user:
+                      description: The user ID in the form of their primary email
+                        address
+                      type: string
+                  type: object
+                type: array
+              slxGroups:
+                description: A set of tag search terms that allow slxs to be grouped
+                  together as a unit in the map view
+                items:
+                  properties:
+                    capitol:
+                      description: An optional name of an slx that represents the
+                        group when the rest can't all be displayed
+                      type: string
+                    dependsOn:
+                      description: An array of group names that this group depends
+                        on
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      description: The name for this slx group
+                      type: string
+                    slxs:
+                      description: An array of slx names that are members of the group
+                      items:
+                        type: string
+                      type: array
+                    tagQuery:
+                      description: A glob-style query across slxs' tags to find which
+                        ones are members of the group (only basic support for now)
+                      type: string
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              slxRelationships:
+                description: |-
+                  A set of relationships between the slxs in this workspace that play a role in visualization (and eventually
+                  even more) that inform where to play slxs/groups in the map
+                items:
+                  properties:
+                    directObject:
+                      description: The name of an slx or a group
+                      type: string
+                    subject:
+                      description: The name of an slx or a group
+                      type: string
+                    verb:
+                      description: A verb term describing the relationship between
+                        subject and directObject
+                      type: string
+                  type: object
+                type: array
+              workspaceServicesProvided:
+                description: A set of location services made available by this workspace
+                  (".workspace" services)
+                items:
+                  properties:
+                    locations:
+                      description: |-
+                        A lit of locations where this service should be made available, if
+                        empty then default to all locations
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      description: The name of this , alphanumeric and hyphens
+                      pattern: '[\w\-]+'
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: WorkspaceStatus defines the observed state of Workspace
+            properties:
+              cacheUrl:
+                description: CacheUrl is the URL of the artifact cache for this workspace
+                  git repository
+                type: string
+              lastAvailableRevision:
+                description: LastAvailableRevision is the last revision of the workspace
+                  that was available to the platform
+                type: string
+              runnerControlCertificate:
+                description: RunnerControlCertificate is the certificate that the
+                  runner uses to authenticate with the runnter-control server
+                properties:
+                  createdAt:
+                    description: CreatedAt is the time the certificate was created,
+                      not issued
+                    format: date-time
+                    type: string
+                  expiresAt:
+                    description: ExpiresAt is the time the certificate expires
+                    format: date-time
+                    type: string
+                  name:
+                    description: Name is the name of the certificate
+                    type: string
+                  renewAt:
+                    description: RenewalAt is the time the certificate should be renewed
+                      before it expires
+                    format: date-time
+                    type: string
+                type: object
+              runnerMetricsCertificate:
+                description: RunnerMetricsCertificate is the certificate that the
+                  runner uses to authenticate with the metrics server
+                properties:
+                  createdAt:
+                    description: CreatedAt is the time the certificate was created,
+                      not issued
+                    format: date-time
+                    type: string
+                  expiresAt:
+                    description: ExpiresAt is the time the certificate expires
+                    format: date-time
+                    type: string
+                  name:
+                    description: Name is the name of the certificate
+                    type: string
+                  renewAt:
+                    description: RenewalAt is the time the certificate should be renewed
+                      before it expires
+                    format: date-time
+                    type: string
+                type: object
+              runnerVaultRole:
+                description: RunnerVaultRole is the role that the runner uses to authenticate
+                  with vault
+                properties:
+                  createdAt:
+                    description: CreatedAt is the time the role was created
+                    format: date-time
+                    type: string
+                  name:
+                    description: Name is the name of the role
+                    type: string
+                  policies:
+                    description: Policies is a list of vault policies that the role
+                      has been assigned
+                    items:
+                      type: string
+                    type: array
+                  secretIDRotatedAt:
+                    description: SecretIDRotatedAt is the time the secret ID was last
+                      rotated
+                    format: date-time
+                    type: string
+                type: object
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

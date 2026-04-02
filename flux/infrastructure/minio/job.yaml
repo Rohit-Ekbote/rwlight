@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-minio-buckets
+  namespace: minio
+spec:
+  template:
+    spec:
+      containers:
+      - name: mc
+        image: minio/mc
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "Creating bucket: $MIMIR_BUCKET_NAME"
+            mc alias set local http://${s3_endpoint} ${s3_access_key_id} ${s3_secret_access_key}
+            mc mb local/"$MIMIR_BUCKET_NAME"
+            mc mb local/codecollectionversion
+            mc mb local/shared-workspace
+            mc mb local/vault-storage
+            mc mb local/litellm-logging
+        env:
+        - name: MIMIR_BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: minio-config
+              key: mimir-bucket
+        - name: s3_endpoint
+          value: ${s3_endpoint}
+        - name: s3_access_key_id
+          value: ${s3_access_key_id}
+        - name: s3_secret_access_key
+          value: ${s3_secret_access_key}
+      restartPolicy: OnFailure

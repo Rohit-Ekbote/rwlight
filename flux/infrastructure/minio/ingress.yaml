@@ -1,0 +1,57 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-console-ingress
+  namespace: minio
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    external-dns.alpha.kubernetes.io/hostname: minio.${subdomain}.${domain}.
+    nginx.ingress.kubernetes.io/client-body-buffer-size: 100m
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+spec:
+  ingressClassName: "ingress-nginx"
+  rules:
+  - host: minio-console.${subdomain}.${domain}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio-console
+            port:
+              number: 9001
+  tls:
+  - hosts:
+    - minio-console.${subdomain}.${domain}
+    secretName: minio-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-ingress
+  namespace: minio
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    external-dns.alpha.kubernetes.io/hostname: minio.${subdomain}.${domain}.
+    nginx.ingress.kubernetes.io/client-body-buffer-size: 100m
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+spec:
+  ingressClassName: "ingress-nginx"
+  rules:
+  - host: minio.${subdomain}.${domain}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio
+            port:
+              number: 9000
+  tls:
+  - hosts:
+    - minio.${subdomain}.${domain}
+    secretName: minio-tls

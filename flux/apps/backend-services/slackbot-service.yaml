@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: slackbot
+  namespace: backend-services
+spec:
+  type: ClusterIP
+  selector:
+    app: slackbot
+  ports:
+  - port: 80
+    targetPort: 8000

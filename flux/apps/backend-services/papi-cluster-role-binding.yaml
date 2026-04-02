@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: papi-crb
+  labels: 
+    app: papi
+roleRef:
+  kind: ClusterRole
+  name: papi-cr
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: papi-sa
+    namespace: backend-services

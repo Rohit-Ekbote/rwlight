@@ -1,0 +1,38 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kube-state-metrics
+  namespace: kube-system
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics          # ← chart already sets this
+
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      honorLabels: true        # keep KSM’s own labels; avoids “exported_” rewrites
+
+      # ────────────────────────
+      # Metric-level filtering
+      # ────────────────────────
+      #
+      # 1. Drop headless-service scrape noise        (rare with KSM but harmless)
+      # 2. Strip the high-cardinality labels we never alert or group on
+      #    – pod-/container-level IDs
+      #    – dynamic PVC / job names
+      #
+      metricRelabelings:
+        # 1) skip metrics coming from headless services, if any
+        - sourceLabels: [service]
+          regex: ".*-headless"
+          action: drop
+
+        # 2) remove label keys that blow up series count
+        - regex: 'uid|pod|pod_uid|container_id|image_id|persistentvolumeclaim|job_name'
+          action: labeldrop

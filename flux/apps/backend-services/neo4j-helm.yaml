@@ -1,0 +1,170 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmRepository
+metadata:
+  name: neo4j
+  namespace: backend-services
+spec:
+  interval: 1h0m0s
+  url: https://helm.neo4j.com/neo4j
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: neo4j
+  namespace: backend-services
+spec:
+  releaseName: neo4j
+  chart:
+    spec:
+      chart: neo4j
+      sourceRef:
+        kind: HelmRepository
+        name: neo4j
+        namespace: backend-services
+      version: "5.26.0"
+  interval: 5m
+  values:
+    neo4j:
+      name: "neo4j"
+      edition: "community"
+      acceptLicenseAgreement: "yes"
+      resources:
+        requests:
+          cpu: "1"
+          memory: "2Gi"
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+    volumes:
+      data:
+        mode: dynamic
+        dynamic:
+          storageClassName: local-path
+          requests:
+            storage: 10Gi
+    services:
+      default:
+        type: ClusterIP
+    # Enable plugins
+    # Note: Community edition might have limitations, but plugins are generally supported.
+    # The environment variables method is often used for plugins in docker,
+    # but the chart has specific values or we pass env vars.
+    # For official chart, we can use `env` to set `NEO4J_PLUGINS`.
+    env:
+      NEO4J_PLUGINS: '["apoc"]'
+      # Granting APOC permissions might be needed
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*,gds.*"
+      # Memory configuration for ~1M nodes
+      # Heap: 50% of available memory (8Gi of 16Gi limit)
+      NEO4J_dbms_memory_heap_initial__size: "1g"
+      NEO4J_dbms_memory_heap_max__size: "1g"
+      # Page cache: 50% of available memory for community edition
+      NEO4J_dbms_memory_pagecache_size: "512m"
+      # Connection pool settings for 100 parallel connections
+      NEO4J_dbms_connector_bolt_thread__pool__max__size: "50"
+      NEO4J_dbms_connector_bolt_thread__pool__min__size: "10"
+      # Transaction settings for better concurrency
+      NEO4J_dbms_transaction_timeout: "60s"
+      NEO4J_dbms_lock_acquisition_timeout: "30s"
+
+    logging:
+      serverLogsXml: |-
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Configuration status="ERROR" monitorInterval="30" packages="org.neo4j.logging.log4j">
+            <Appenders>
+                <!-- Console appender for Kubernetes stdout -->
+                <Console name="ConsoleAppender" target="SYSTEM_OUT">
+                    <JsonTemplateLayout eventTemplateUri="classpath:org/neo4j/logging/StructuredLayoutWithMessage.json"/>
+                </Console>
+            </Appenders>
+
+            <Loggers>
+                <!-- Root logger -->
+                <Root level="INFO">
+                    <AppenderRef ref="ConsoleAppender"/>
+                </Root>
+
+                <!-- Query logger -->
+                <Logger name="QueryLogger" level="INFO" additivity="false">
+                    <AppenderRef ref="ConsoleAppender"/>
+                </Logger>
+
+                <!-- HTTP logger -->
+                <Logger name="HttpLogger" level="INFO" additivity="false">
+                    <AppenderRef ref="ConsoleAppender"/>
+                </Logger>
+
+                <!-- Security logger -->
+                <Logger name="SecurityLogger" level="INFO" additivity="false">
+                    <AppenderRef ref="ConsoleAppender"/>
+                </Logger>
+            </Loggers>
+        </Configuration>
+
+      userLogsXml: |-
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Configuration status="ERROR" monitorInterval="30" packages="org.neo4j.logging.log4j">
+            <Appenders>
+                <!-- Console appender for Kubernetes stdout -->
+                <Console name="ConsoleAppender" target="SYSTEM_OUT">
+                    <JsonTemplateLayout eventTemplateUri="classpath:org/neo4j/logging/StructuredLayoutWithMessage.json"/>
+                </Console>
+            </Appenders>
+
+            <Loggers>
+                <Root level="INFO">
+                    <AppenderRef ref="ConsoleAppender"/>
+                </Root>
+            </Loggers>
+        </Configuration>
+
+    config:
+      # ── Neo4j Server Configuration ────────────────────────────────────────
+      #
+      # Memory budget (16 GiB total):
+      #   ┌─────────────────────┬───────┬────────┬──────────────────────────────────────┐
+      #   │ Component           │ Size  │ % of   │ Rationale                            │
+      #   │                     │       │ 16 GiB │                                      │
+      #   ├─────────────────────┼───────┼────────┼──────────────────────────────────────┤
+      #   │ JVM Heap            │  5 GiB│ 31.25% │ Cypher planning, tx state, queries   │
+      #   │ Page Cache          │  7 GiB│ 43.75% │ Store mapped files (currently 1.5G)  │
+      #   │ OS / JVM overhead   │  4 GiB│ 25.00% │ Lucene off-heap (27 indexes incl.   │
+      #   │   (implicit)        │       │        │ vector), Netty, metaspace, threads   │
+      #   └─────────────────────┴───────┴────────┴──────────────────────────────────────┘
+      #   Note // cut in half for test / 8G
+      # Current store: 2.5 GiB, mapped files: 1.5 GiB, 690K nodes, 1.3M rels
+      # Growth plan:   7 GiB page cache supports ~4x store growth (~10 GiB)
+      #                before needing reconfiguration.
+      #
+      # ── Heap Memory (31.25% of 16 GiB) ──────────────────────────────────
+      # Initial = Max eliminates GC resizing and stop-the-world pauses
+      # caused by heap expansion under load (root cause of GC warnings in logs).
+      server.memory.heap.initial_size: "1g"   # 31.25% — pinned, no resize
+      server.memory.heap.max_size: "1g"       # 31.25% — pinned, no resize
+
+      # ── Page Cache (43.75% of 16 GiB) ───────────────────────────────────
+      # Maps store files into memory. Current mapped files: 1.5 GiB.
+      # 7 GiB handles ~4x growth before page faults occur.
+      server.memory.pagecache.size: "512m"      # 43.75% — largest allocation
+
+      # ── Query Logging ───────────────────────────────────────────────────
+      # Was: threshold=0s (logs EVERY query — adds CPU overhead during indexing)
+      # Now: only log queries slower than 5s (catches real problems, not noise)
+      db.logs.query.enabled: "INFO"
+      db.logs.query.threshold: "5s"
+      db.logs.query.parameter_logging_enabled: "true"
+      db.logs.query.plan_description_enabled: "true"
+
+      # ── Transaction Log Retention ────────────────────────────────────────
+      # Currently 768 MiB across 3 files. 1 day retention is reasonable.
+      db.tx_log.rotation.retention_policy: "1 days"
+
+      # ── Validation ──────────────────────────────────────────────────────
+      server.config.strict_validation.enabled: "false"
+
+    # ── APOC ──────────────────────────────────────────────────────────────
+    # APOC is NOT used anywhere in the usearch codebase (confirmed via search).
+    # Removing it eliminates ~50 NoClassDefFoundError warnings and sandboxing
+    # warnings on every startup. Re-enable if fuzzy search (Levenshtein) is
+    # implemented in the future.
+    apoc_config: {}

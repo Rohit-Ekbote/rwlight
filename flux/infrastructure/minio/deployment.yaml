@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        image: minio/minio:latest
+        args:
+        - server
+        - /data
+        env:
+        - name: MINIO_ACCESS_KEY
+          value: ${s3_access_key_id}
+        - name: MINIO_SECRET_KEY
+          value: ${s3_secret_access_key}
+        - name: MINIO_CONSOLE_ADDRESS
+          value: ":9001"
+        ports:
+        - containerPort: 9000
+        - containerPort: 9001
+        volumeMounts:
+        - name: storage
+          mountPath: /data
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: minio-pv-claim

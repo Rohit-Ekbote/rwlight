@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitservice
+  namespace: flux-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitservice
+  template:
+    metadata:
+      labels:
+        app: gitservice
+    spec:
+      serviceAccountName: gitservice-sa
+      containers:
+      - image: busybox
+        # command: ['sh', '-c', "ls /secrets && sleep 300"]
+        command: [ "/bin/sh", "-c", "--" ]
+        args: [ "while true; do sleep 30; done;" ]
+        imagePullPolicy: IfNotPresent
+        name: busybox
+        volumeMounts:
+        - name: vault-secrets
+          mountPath: /secrets
+      volumes:
+      - name: vault-secrets
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "vault-gitservice"

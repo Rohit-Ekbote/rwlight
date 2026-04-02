@@ -1,0 +1,7 @@
+resources: 
+- namespace.yaml
+- helm-mimir.yaml
+- helm-consul.yaml
+- mimir-tenant.yaml
+- helm-grafana.yaml
+- image-pull-sa.yaml

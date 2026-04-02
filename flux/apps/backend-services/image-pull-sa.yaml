@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: image-pull-sa
+  namespace: backend-services
+imagePullSecrets:
+  - name: gcp-registry-key

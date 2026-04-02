@@ -1,0 +1,25 @@
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: vault 
+  name: hashicorp-vault-role
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hashicorp-vault-role-binding
+  namespace: vault
+  labels:
+    app: hashicorp-vault
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hashicorp-vault-role
+subjects:
+- kind: ServiceAccount
+  name: vault-sa
+  namespace: vault  

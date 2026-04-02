@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: alerts
+  namespace: backend-services
+spec:
+  type: ClusterIP
+  selector:
+    app: alerts
+  ports:
+  - port: 80
+    targetPort: 8000
