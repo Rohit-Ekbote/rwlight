@@ -48,8 +48,8 @@ check_requirements() {
         cpu_cores=$(nproc)
     fi
     
-    if [ "$cpu_cores" -lt 8 ]; then
-        log_warning "CPU cores: $cpu_cores (recommended: 8-12)"
+    if [ "$cpu_cores" -lt 4 ]; then
+        log_warning "CPU cores: $cpu_cores (minimum: 4)"
     else
         log_success "CPU cores: $cpu_cores ✓"
     fi
@@ -62,8 +62,8 @@ check_requirements() {
         total_ram=$(free -g | awk '/^Mem:/{print $2}')
     fi
     
-    if [ "$total_ram" -lt 12 ]; then
-        log_warning "RAM: ${total_ram}GB (recommended: 12GB)"
+    if [ "$total_ram" -lt 8 ]; then
+        log_warning "RAM: ${total_ram}GB (minimum: 8GB, recommended: 10GB)"
     else
         log_success "RAM: ${total_ram}GB ✓"
     fi
@@ -75,8 +75,8 @@ check_requirements() {
         available_disk=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
     fi
     
-    if [ "$available_disk" -lt 256 ]; then
-        log_warning "Available disk space: ${available_disk}GB (recommended: 256GB)"
+    if [ "$available_disk" -lt 50 ]; then
+        log_warning "Available disk space: ${available_disk}GB (minimum: 50GB)"
     else
         log_success "Available disk space: ${available_disk}GB ✓"
     fi
@@ -86,6 +86,9 @@ check_requirements() {
 setup_platform() {
     log_info "Setting up platform..."
     
+    # Ensure k3s data directory exists
+    sudo mkdir -p /mnt/k3s-disk
+
     # Create k3s cluster
     log_info "Creating k3s cluster..."
     curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sudo sh -

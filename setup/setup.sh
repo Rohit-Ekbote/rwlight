@@ -17,9 +17,15 @@ open_in_editor() {
 }
 
 main() {
-  setup_dir="$HOME/setup"
-  infra_dir="$HOME/flux"
-  tf_dir="$HOME/tf"
+  # Detect project root: use the directory containing this script's parent
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local project_root
+  project_root="$(cd "$script_dir/.." && pwd)"
+
+  setup_dir="${project_root}/setup"
+  infra_dir="${project_root}/flux"
+  tf_dir="${project_root}/tf"
 
   trap cleanup EXIT
 
