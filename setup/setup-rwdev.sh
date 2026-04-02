@@ -271,14 +271,28 @@ EOF
 
     log_info "✅ Gitea is accessible"
 
-    if (cd "$TF_DIR" && \
-        git add . && \
-        (git commit -m "TF State Commit" || :) && \
-        git push gitea main -f); then
-        log_success "successfully committed tf states to gitea..."
+    # Push updated TF state to Gitea — use a temp clone to avoid git-in-worktree issues
+    GITEA_TOKEN=$(kubectl get secret gitea-bootstrap-token --namespace=gitea -o jsonpath='{.data.token}' | base64 -d || true)
+    if [ -n "$GITEA_TOKEN" ]; then
+        TF_PUSH_TMP=$(mktemp -d)
+        GIT_TF_URL="http://${GITEA_ADMIN_USER}:${GITEA_TOKEN}@localhost:3000/platform-setup/infra.git"
+        if (cd "$TF_PUSH_TMP" && \
+            git clone "$GIT_TF_URL" repo && \
+            rsync -a --exclude='.git' "$TF_DIR/" repo/ && \
+            cd repo && \
+            git config user.name "runwhen-machine" && \
+            git config user.email "runwhen-machine@runwhen.com" && \
+            git add . && \
+            (git commit -m "TF State Commit" || :) && \
+            git push origin main -f); then
+            log_success "successfully committed tf states to gitea..."
+        else
+            log_error "Failed to commit tf state to gitea"
+            EXIT_CODE=1234
+        fi
+        rm -rf "$TF_PUSH_TMP"
     else
-        log_error "Failed to commit tf state to gitea"
-        EXIT_CODE=1234
+        log_warning "No Gitea token found, skipping TF state push"
     fi
     TF_SUCCESS='true'
 }

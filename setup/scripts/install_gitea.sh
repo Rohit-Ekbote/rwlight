@@ -156,21 +156,20 @@ fi
 echo "🔄 Pushing code from '$INFRA_DIR' to '$ORG_NAME/$REPO_NAME'..."
 GIT_REPO_URL_WITH_CREDS="http://$GITEA_ADMIN_USER:$TOKEN@localhost:3000/$ORG_NAME/$REPO_NAME.git"
 
-if [ ! -d "$INFRA_DIR/.git" ]; then
-    echo "⚠️  '$INFRA_DIR' is not a git repository. Initializing..."
-    (cd "$INFRA_DIR" && git init -q --initial-branch="$BRANCH_NAME")
-fi
+# Copy to a temp directory to avoid git-in-git issues when source is inside a worktree
+INFRA_TMP=$(mktemp -d)
+rsync -a --exclude='.git' "$INFRA_DIR/" "$INFRA_TMP/"
 
-(cd "$INFRA_DIR" && \
+(cd "$INFRA_TMP" && \
+  git init -q --initial-branch="$BRANCH_NAME" && \
   git config user.name "runwhen-machine" && \
   git config user.email "runwhen-machine@runwhen.com" && \
   git add . && \
-  (git commit -m "Initial Commit" || :) && \
-  (git remote remove gitea 2>/dev/null || :) && \
+  git commit -m "Initial Commit" && \
   git remote add gitea "$GIT_REPO_URL_WITH_CREDS" && \
-  (git fetch gitea 2>/dev/null || :) && \
   git push --set-upstream gitea "$BRANCH_NAME" -f)
 
+rm -rf "$INFRA_TMP"
 echo "✅ Code pushed to http://localhost:3000/$ORG_NAME/$REPO_NAME"
 
 ### 10. Create repo in Gitea and push from local TF_DIR ###
@@ -194,21 +193,20 @@ fi
 echo "🔄 Pushing code from '$TF_DIR' to '$ORG_NAME/$TF_REPO_NAME'..."
 GIT_REPO_URL_WITH_CREDS="http://$GITEA_ADMIN_USER:$TOKEN@localhost:3000/$ORG_NAME/$TF_REPO_NAME.git"
 
-if [ ! -d "$TF_DIR/.git" ]; then
-    echo "⚠️  '$TF_DIR' is not a git repository. Initializing..."
-    (cd "$TF_DIR" && git init -q --initial-branch="$BRANCH_NAME")
-fi
+# Copy to a temp directory to avoid git-in-git issues when source is inside a worktree
+TF_TMP=$(mktemp -d)
+rsync -a --exclude='.git' "$TF_DIR/" "$TF_TMP/"
 
-(cd "$TF_DIR" && \
+(cd "$TF_TMP" && \
+  git init -q --initial-branch="$BRANCH_NAME" && \
   git config user.name "runwhen-machine" && \
   git config user.email "runwhen-machine@runwhen.com" && \
   git add . && \
-  (git commit -m "Initial Commit" || :) && \
-  (git remote remove gitea 2>/dev/null || :) && \
+  git commit -m "Initial Commit" && \
   git remote add gitea "$GIT_REPO_URL_WITH_CREDS" && \
-  (git fetch gitea 2>/dev/null || :) && \
   git push --set-upstream gitea "$BRANCH_NAME" -f)
 
+rm -rf "$TF_TMP"
 echo "✅ Code pushed to http://localhost:3000/$ORG_NAME/$TF_REPO_NAME"
 
 # Clean up port forward
