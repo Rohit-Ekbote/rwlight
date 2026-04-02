@@ -39,15 +39,14 @@ spec:
         enabled: true
         default: false
         controllerValue: "k8s.io/ingress-nginx"
-      replicaCount: 2
-      minAvailable: 1
+      replicaCount: 1
       resources:
         limits:
-          cpu: 1
-          memory: 1024Mi
+          cpu: 500m
+          memory: 512Mi
         requests:
           cpu: 100m
-          memory: 90Mi
+          memory: 256Mi
       opentelemetry:
         enabled: true
       config:
