@@ -59,12 +59,9 @@ helm upgrade --install $GITEA_RELEASE gitea-charts/gitea \
   --set postgresql-ha.enabled=false \
   --set postgresql.enabled=false \
   --set redis-cluster.enabled=false \
-  --set gitea.config.cache.ADAPTER=redis \
-  --set "gitea.config.cache.HOST=redis+sentinel://:${REDIS_PASSWORD}@redis-sentinel.backend-services.svc.cluster.local:26379/1?masterName=mymaster" \
-  --set gitea.config.session.PROVIDER=redis \
-  --set "gitea.config.session.PROVIDER_CONFIG=redis+sentinel://:${REDIS_PASSWORD}@redis-sentinel.backend-services.svc.cluster.local:26379/1?masterName=mymaster" \
-  --set gitea.config.queue.TYPE=redis \
-  --set "gitea.config.queue.CONN_STR=redis+sentinel://:${REDIS_PASSWORD}@redis-sentinel.backend-services.svc.cluster.local:26379/1?masterName=mymaster"
+  --set gitea.config.cache.ADAPTER=memory \
+  --set gitea.config.session.PROVIDER=memory \
+  --set gitea.config.queue.TYPE=level
 
 ### 4. Wait for Gitea to be ready ###
 echo "⏳ Waiting for Gitea deployment to be ready..."
