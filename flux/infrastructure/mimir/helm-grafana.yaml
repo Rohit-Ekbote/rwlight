@@ -15,3 +15,12 @@ spec:
   interval: 5m
   values: #https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
     adminUser: runwhen-machine
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+        - name: Mimir
+          type: prometheus
+          url: http://mimir-monolithic.mimir.svc.cluster.local:8080/prometheus
+          access: proxy
+          isDefault: true

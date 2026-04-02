@@ -109,7 +109,7 @@ configMapGenerator:
   - PAPI_PUBLIC_URL='https://papi.${subdomain}.${domain}'
   - ACTIVITIES_SERVICE_URL='http://activities.backend-services.svc.cluster.local'
   - VAULT_AUTH_MOUNT_POINT='kubernetes'
-  - CORTEX_QUERY_URL="http://mimir-nginx.mimir.svc.cluster.local/prometheus/api/v1/query"
+  - CORTEX_QUERY_URL="http://mimir-monolithic.mimir.svc.cluster.local:8080/prometheus/api/v1/query"
   - ALLOWED_HOSTS=['*.${subdomain}.${domain}', '127.0.0.1', 'localhost', 'papi.backend-services.svc.cluster.local']
   - LOGIN_REDIRECT_URL="https://app.${subdomain}.${domain}/success"
   - SHARED_WORKSPACE_BUCKET="shared-workspace"

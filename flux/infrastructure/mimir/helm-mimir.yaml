@@ -24,19 +24,38 @@ spec:
       create: true
       name: mimir-sa
 
+    deploymentMode: monolithic
+
+    monolithic:
+      enabled: true
+      replicas: 1
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          cpu: "1"
+          memory: 512Mi
+      extraArgs:
+        log.format: json
+      persistentVolume:
+        enabled: true
+        size: 10Gi
+        storageClass: local-path
+
     mimir:
       structuredConfig:
         server:
           http_listen_port: 8080
-        
+
         api:
           prometheus_http_prefix: "/prometheus"
-        
+
         multitenancy_enabled: false
 
         activity_tracker: {}
         compactor: {}
-        
+
         # Use common storage configuration - automatically handles prefixes
         common:
           storage:
@@ -53,7 +72,7 @@ spec:
 
         ruler_storage:
           storage_prefix: ruler
-        
+
         ingester:
           ring:
             replication_factor: 1
@@ -68,18 +87,6 @@ spec:
           storage_prefix: blocks
           bucket_store:
             sync_dir: "/data"
-            # index_cache:
-            #   backend: memcached
-            #   memcached:
-            #     addresses: 'dns+mimir-index-cache.mimir.svc'
-            # chunks_cache:
-            #   backend: memcached
-            #   memcached:
-            #     addresses: 'dns+mimir-chunks-cache.mimir.svc'
-            # metadata_cache:
-            #   backend: memcached
-            #   memcached:
-            #     addresses: 'dns+mimir-metadata-cache.mimir.svc'
             bucket_index: {}  # Enable bucket index with default settings
           tsdb:
             dir: "/data"
@@ -93,99 +100,57 @@ spec:
           alertmanager_url: http://alerts.backend-services.svc.cluster.local
           enable_api: true
 
-    # Component-specific configs
+    memberlist:
+      join_members: []
+
+    # Disable distributed components
     alertmanager:
-      statefulset:
-        enabled: true
-      extraArgs:
-        log.format: json
+      enabled: false
 
     compactor:
-      extraArgs:
-        log.format: json
+      enabled: false
 
     distributor:
-      resources:
-        requests:
-          memory: "256Mi"
-      extraArgs:
-        log.format: json
+      enabled: false
 
     store_gateway:
-      resources:
-        requests:
-          memory: "256Mi"
-      extraArgs:
-        log.format: json
-      zoneAwareReplication:
-        enabled: false
+      enabled: false
 
     querier:
-      replicas: 1
-      extraArgs:
-        log.format: json
+      enabled: false
 
     query_frontend:
-      extraArgs:
-        log.format: json
+      enabled: false
+
+    query_scheduler:
+      enabled: false
 
     ruler:
-      extraArgs:
-        log.format: json
+      enabled: false
 
     ingester:
-      replicas: 1
-      resources:
-        requests:
-          memory: "256Mi"
-      extraArgs:
-        log.format: json
-      statefulSet:
-        enabled: true
-      podManagementPolicy: Parallel
-      statefulStrategy:
-        type: OnDelete
-      zoneAwareReplication:
-        enabled: false
-    
+      enabled: false
+
+    overrides_exporter:
+      enabled: false
+
+    rollout_operator:
+      enabled: false
+
     chunks-cache:
-      enabled: true
-      replicas: 1
-      allocatedMemory: 512
-      resources:
-        requests:
-          cpu: "80m"
-          memory: "256Mi"
-        limits:
-          cpu: "500m"
-          memory: "600Mi"
+      enabled: false
 
     index-cache:
-      enabled: true
-      replicas: 1
-      resources:
-        requests:
-          memory: "1024Mi"
+      enabled: false
 
     metadata-cache:
-      enabled: true
-      replicas: 1
-      resources:
-        requests:
-          memory: "256Mi"
+      enabled: false
 
     results-cache:
-      enabled: true
-      replicas: 1
-      resources:
-        requests:
-          memory: "256Mi"
-    
-    memberlist:
-      join_members:
-        - mimir-ingester.mimir.svc.cluster.local
-        - mimir-distributor.mimir.svc.cluster.local
-        - mimir-querier.mimir.svc.cluster.local
-    
+      enabled: false
+
+    nginx:
+      enabled: false
+
     minio:
       enabled: false

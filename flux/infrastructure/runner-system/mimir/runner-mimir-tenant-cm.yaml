@@ -11,7 +11,7 @@ data:
     # Profiling API, remove to disable
     listen_pprof: 0.0.0.0:7008
     # Where to send the modified requests (Mimir)
-    target: http://mimir-nginx/api/v1/push
+    target: http://mimir-monolithic.mimir.svc.cluster.local:8080/api/v1/push
     # Log level
     log_level: debug
     # HTTP request timeout
