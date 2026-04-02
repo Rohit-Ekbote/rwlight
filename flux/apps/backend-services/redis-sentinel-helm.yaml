@@ -17,6 +17,8 @@ spec:
   values:
     global:
       storageClass: local-path
+    auth:
+      password: "${redis_password}"
     image:
       repository: bitnamilegacy/redis
     master:

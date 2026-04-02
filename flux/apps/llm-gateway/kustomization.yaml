@@ -2,7 +2,7 @@ namespace: llm-gateway
 resources:
 - namespace.yaml
 - litellm-db-cluster.yaml
-- litellm-redis-helm.yaml
+- shared-redis-secret.yaml
 - litellm-proxy-configmap.yaml
 - litellm-proxy-sa.yaml
 - litellm-proxy-csi-secret-class.yaml

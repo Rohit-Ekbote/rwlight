@@ -48,7 +48,7 @@ spec:
         image: busybox:1.28
         env:
         - name: REDIS_HOST
-          value: "litellm-redis-master"
+          value: "redis-sentinel-headless.backend-services.svc.cluster.local"
         command: ["sh", "-c", "until nslookup $REDIS_HOST; do echo waiting for redis; sleep 2; done"]
       containers:
       - name: litellm-proxy
@@ -120,13 +120,13 @@ spec:
           value: "True"
         # Redis configuration
         - name: REDIS_HOST
-          value: "litellm-redis-master"
+          value: "redis-sentinel-node-0.redis-sentinel-headless.backend-services.svc.cluster.local"
         - name: REDIS_PORT
           value: "6379"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: litellm-redis
+              name: shared-redis-password
               key: redis-password
         - name: REDIS_NAMESPACE
           value: "llm-gateway"
