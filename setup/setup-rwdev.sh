@@ -93,62 +93,6 @@ setup_platform() {
     log_info "Creating k3s cluster..."
     curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sudo sh -
 
-    # On ARM64 with Rosetta (Lima VZ on Apple Silicon), RunWhen images
-    # are AMD64-only. Configure containerd to default to linux/amd64 platform
-    # so k3s pulls AMD64 images that Rosetta can execute.
-    if [ "$(uname -m)" = "aarch64" ] && [ -f /proc/sys/fs/binfmt_misc/rosetta ]; then
-        log_info "ARM64 with Rosetta detected — configuring containerd for AMD64 image pulls"
-        sudo mkdir -p /var/lib/rancher/k3s/agent/etc/containerd
-        sudo tee /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl > /dev/null <<'CTD_EOF'
-version = 2
-
-[plugins."io.containerd.grpc.v1.cri"]
-  sandbox_image = "{{ .NodeConfig.AgentConfig.PauseImage }}"
-  [plugins."io.containerd.grpc.v1.cri".cni]
-    bin_dir = "{{ .NodeConfig.AgentConfig.CNIBinDir }}"
-    conf_dir = "{{ .NodeConfig.AgentConfig.CNIConfDir }}"
-  [plugins."io.containerd.grpc.v1.cri".containerd]
-    snapshotter = "{{ .NodeConfig.Containerd.Snapshotter }}"
-    disable_snapshot_annotations = {{ if .NodeConfig.Containerd.DisableSnapshotAnnotations }}true{{ else }}false{{ end }}
-    default_runtime_name = "runc"
-    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-      runtime_type = "io.containerd.runc.v2"
-      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-        SystemdCgroup = true
-  [plugins."io.containerd.grpc.v1.cri".image_decryption]
-
-# Force AMD64 platform for all image pulls on ARM64+Rosetta
-[plugins."io.containerd.grpc.v1.cri".containerd.default_platform]
-  os = "linux"
-  architecture = "amd64"
-
-{{ if .PrivateRegistryConfig }}
-{{ if .PrivateRegistryConfig.Mirrors }}
-{{ range $k, $v := .PrivateRegistryConfig.Mirrors }}
-[plugins."io.containerd.grpc.v1.cri".registry.mirrors."{{ $k }}"]
-  endpoint = [{{ range $i, $j := $v.Endpoints }}{{ if $i }}, {{ end }}{{ printf "%q" . }}{{ end }}]
-{{ end }}
-{{ end }}
-
-{{ range $k, $v := .PrivateRegistryConfig.Configs }}
-{{ if $v.Auth }}
-[plugins."io.containerd.grpc.v1.cri".registry.configs."{{ $k }}".auth]
-  {{ if $v.Auth.Username }}username = {{ printf "%q" $v.Auth.Username }}{{ end }}
-  {{ if $v.Auth.Password }}password = {{ printf "%q" $v.Auth.Password }}{{ end }}
-  {{ if $v.Auth.Auth }}auth = {{ printf "%q" $v.Auth.Auth }}{{ end }}
-{{ end }}
-{{ if $v.TLS }}
-[plugins."io.containerd.grpc.v1.cri".registry.configs."{{ $k }}".tls]
-  {{ if $v.TLS.CAFile }}ca_file = "{{ $v.TLS.CAFile }}"{{ end }}
-  {{ if $v.TLS.CertFile }}cert_file = "{{ $v.TLS.CertFile }}"{{ end }}
-  {{ if $v.TLS.KeyFile }}key_file = "{{ $v.TLS.KeyFile }}"{{ end }}
-  {{ if $v.TLS.InsecureSkipVerify }}insecure_skip_verify = true{{ end }}
-{{ end }}
-{{ end }}
-{{ end }}
-CTD_EOF
-    fi
-
     sudo tee /etc/rancher/k3s/config.yaml > /dev/null <<EOF
 cluster-init: true
 data-dir: /mnt/k3s-disk/k3s-data
