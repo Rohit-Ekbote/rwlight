@@ -21,7 +21,9 @@ POSTGRES_VERSION="12.1.9"
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
 ### 2. Install Postgres ###
-helm upgrade --install postgres oci://registry-1.docker.io/bitnamicharts/postgresql \
+helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
+helm repo update bitnami
+helm upgrade --install postgres bitnami/postgresql \
   --namespace $NAMESPACE \
   --version $POSTGRES_VERSION \
   --set auth.username=gitea \
