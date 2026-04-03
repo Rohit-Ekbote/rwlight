@@ -21,15 +21,22 @@ POSTGRES_VERSION="12.1.9"
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
 ### 2. Install Postgres ###
-helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
-helm repo update bitnami
-helm upgrade --install postgres bitnami/postgresql \
-  --namespace $NAMESPACE \
-  --version $POSTGRES_VERSION \
-  --set auth.username=gitea \
-  --set auth.password=gitea_pass \
-  --set auth.database=gitea \
-  --set image.repository=bitnamilegacy/postgresql
+echo "🔄 Installing PostgreSQL (will retry on rate limit)..."
+for attempt in $(seq 1 10); do
+  if helm upgrade --install postgres oci://registry-1.docker.io/bitnamicharts/postgresql \
+    --namespace $NAMESPACE \
+    --version $POSTGRES_VERSION \
+    --set auth.username=gitea \
+    --set auth.password=gitea_pass \
+    --set auth.database=gitea \
+    --set image.repository=bitnamilegacy/postgresql 2>&1; then
+    echo "✅ PostgreSQL installed"
+    break
+  else
+    echo "⚠️  Attempt $attempt failed (likely rate limit), retrying in 30s..."
+    sleep 30
+  fi
+done
 
 ### 3. Install Gitea ###
 helm repo add gitea-charts https://dl.gitea.io/charts/
