@@ -98,7 +98,7 @@ data "external" "add_runwhen_to_default_org_owners" {
   query = {
     admin_username  = var.gitea_admin_username
     admin_password  = var.gitea_admin_password
-    gitea_url       = "https://${var.gitea_address}"
+    gitea_url       = var.gitea_base_url != "" ? var.gitea_base_url : "https://${var.gitea_address}"
     org_name        = gitea_org.default-org.name
     member_username = gitea_user.runwhen-machine.username
   }
@@ -113,7 +113,7 @@ data "external" "add_runwhen_to_runwhen_platform_owners" {
   query = {
     admin_username  = var.gitea_admin_username
     admin_password  = var.gitea_admin_password
-    gitea_url       = "https://${var.gitea_address}"
+    gitea_url       = var.gitea_base_url != "" ? var.gitea_base_url : "https://${var.gitea_address}"
     org_name        = gitea_org.runwhen-platform.name
     member_username = gitea_user.runwhen-machine.username
   }

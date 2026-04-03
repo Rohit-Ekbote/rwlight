@@ -15,15 +15,26 @@ create_admin_token() {
     local token_name="runwhen-machine-token-$(date +%s)"
     
     # Create token using Gitea API
-    token_response=$(jq -n \
-        --arg name "$token_name" \
-        --argjson scopes '["all"]' \
-        '{name: $name, scopes: $scopes}' | \
-        curl -s -k -X POST \
-        -H "Content-Type: application/json" \
-        -u "${username}:${password}" \
-        -d @- \
-        "${gitea_url}/api/v1/users/${username}/tokens" || echo "failed")
+    # Retry up to 10 times with 3s delay — port-forward may not be stable yet
+    local attempt=0
+    token_response="failed"
+    while [ $attempt -lt 10 ]; do
+        token_response=$(jq -n \
+            --arg name "$token_name" \
+            --argjson scopes '["all"]' \
+            '{name: $name, scopes: $scopes}' | \
+            curl -s -k --connect-timeout 5 --max-time 10 -X POST \
+            -H "Content-Type: application/json" \
+            -u "${username}:${password}" \
+            -d @- \
+            "${gitea_url}/api/v1/users/${username}/tokens" 2>/dev/null || echo "failed")
+        if [ "$token_response" != "failed" ] && echo "$token_response" | jq -e '.sha1' >/dev/null 2>&1; then
+            break
+        fi
+        attempt=$((attempt + 1))
+        echo "Attempt $attempt: Gitea not ready, retrying in 3s..." >&2
+        sleep 3
+    done
     
     if [ "$token_response" = "failed" ]; then
         echo "Failed to create token" >&2
