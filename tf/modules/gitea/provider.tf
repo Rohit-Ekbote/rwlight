@@ -8,7 +8,7 @@ terraform {
 }
 
 provider "gitea" {
-  base_url = "https://${var.gitea_address}"
+  base_url = var.gitea_base_url != "" ? var.gitea_base_url : "https://${var.gitea_address}"
   username = var.gitea_admin_username
   password = var.gitea_admin_password
   insecure = true

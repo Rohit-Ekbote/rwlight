@@ -25,5 +25,5 @@ provider "vault" {
 
 
 provider "kubernetes" {
-  config_path = "~/.kube/config"
+  # Use KUBECONFIG env var — works in both Docker container and Lima VM
 }

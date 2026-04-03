@@ -3,6 +3,7 @@ module "gitea-config" {
   source = "../../modules/gitea"
   vault_ready = null_resource.vault_ready.id
   gitea_address = var.public_https_endpoints.gitea.host
+  gitea_base_url = "http://localhost:3000"
   gitea_admin_username = "root"
   gitea_admin_password = var.gitea_admin_password
   platform_cluster_name = var.platform_cluster_name

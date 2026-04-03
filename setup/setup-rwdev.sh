@@ -108,7 +108,16 @@ EOF
     sudo systemctl restart k3s
 
     export KUBECONFIG=/mnt/k3s-disk/k3s-dev-platform-kubeconfig
-    
+
+    # Wait for kubeconfig to be created and k3s to be ready
+    log_info "Waiting for k3s to be ready..."
+    for i in $(seq 1 60); do
+        if [ -f "$KUBECONFIG" ] && kubectl get nodes &>/dev/null; then
+            break
+        fi
+        sleep 2
+    done
+
     log_success "Platform setup completed"
 }
 

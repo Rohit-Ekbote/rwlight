@@ -6,7 +6,7 @@ data "external" "get-gitea-admin-token" {
   query = {
     admin_username   = var.gitea_admin_username
     admin_password   = var.gitea_admin_password
-    gitea_url        = "https://${var.gitea_address}"
+    gitea_url        = var.gitea_base_url != "" ? var.gitea_base_url : "https://${var.gitea_address}"
   }
 }
 

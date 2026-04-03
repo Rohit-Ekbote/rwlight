@@ -3,6 +3,12 @@ variable "gitea_address" {
   description = "Gitea server address"
 }
 
+variable "gitea_base_url" {
+  type        = string
+  description = "Override base URL for Gitea API (e.g., http://localhost:3000 during setup)"
+  default     = ""
+}
+
 variable "gitea_admin_username" {
   type        = string
   description = "Gitea admin username"
