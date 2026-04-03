@@ -120,6 +120,27 @@ fi
 
 echo "✅ Gitea admin token generated: $TOKEN"
 
+### 7b. Create runwhen-machine user ###
+echo "🔄 Creating 'runwhen-machine' service user..."
+RW_USER_RESPONSE=$(curl -s -w "%{http_code}" -X POST "http://localhost:3000/api/v1/admin/users" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: token $TOKEN" \
+  -d '{
+    "username": "runwhen-machine",
+    "email": "runwhen-machine@runwhen.com",
+    "password": "RunWhen-Machine-Pass-2026!",
+    "login_name": "runwhen-machine",
+    "must_change_password": false,
+    "visibility": "private"
+  }')
+
+RW_USER_HTTP_CODE="${RW_USER_RESPONSE: -3}"
+if [ "$RW_USER_HTTP_CODE" = "201" ] || [ "$RW_USER_HTTP_CODE" = "422" ]; then
+    echo "✅ User 'runwhen-machine' created (or already exists)"
+else
+    echo "⚠️  User creation returned HTTP $RW_USER_HTTP_CODE (may already exist)"
+fi
+
 ### 8. Create organization ###
 echo "🔄 Creating organization '$ORG_NAME'..."
 ORG_RESPONSE=$(curl -s -w "%{http_code}" -X POST "http://localhost:3000/api/v1/orgs" \

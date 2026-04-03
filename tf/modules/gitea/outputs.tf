@@ -4,7 +4,7 @@ output "runwhen-machine-token" {
 }
 
 output "runwhen-machine-user-id" {
-  value = gitea_user.runwhen-machine.id
+  value = 0  # User pre-created by install_gitea.sh, ID not needed
 }
 
 output "runwhen-machine-user-password" {
@@ -13,5 +13,5 @@ output "runwhen-machine-user-password" {
 }
 
 output "runwhen-machine-username" {
-  value = gitea_user.runwhen-machine.username
+  value = local.runwhen_machine_username
 }

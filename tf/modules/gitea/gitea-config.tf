@@ -20,13 +20,11 @@ resource "random_password" "gitea_password" {
   }
 }
 
-## Create runwhen-machine gitea user
-resource "gitea_user" "runwhen-machine" {
-  username             = "runwhen-machine"
-  login_name           = "runwhen-machine"
-  password             = random_password.gitea_password.result
-  email                = "runwhen-machine@runwhen.com"
-  must_change_password = false
+## runwhen-machine user is pre-created by install_gitea.sh
+## We use local values instead of gitea_user resource to avoid provider bugs
+locals {
+  runwhen_machine_username = "runwhen-machine"
+  runwhen_machine_password = random_password.gitea_password.result
 }
 
 ## Create platform organization
@@ -92,7 +90,7 @@ resource "gitea_org" "default-org" {
 data "external" "add_runwhen_to_default_org_owners" {
   depends_on = [
     gitea_org.default-org,
-    gitea_user.runwhen-machine
+    gitea_org.runwhen-platform
   ]
   program    = ["bash", "${path.module}/scripts/add_to_owners.sh"]
   query = {
@@ -100,14 +98,14 @@ data "external" "add_runwhen_to_default_org_owners" {
     admin_password  = var.gitea_admin_password
     gitea_url       = var.gitea_base_url != "" ? var.gitea_base_url : "https://${var.gitea_address}"
     org_name        = gitea_org.default-org.name
-    member_username = gitea_user.runwhen-machine.username
+    member_username = local.runwhen_machine_username
   }
 }
 
 data "external" "add_runwhen_to_runwhen_platform_owners" {
   depends_on = [
     gitea_org.runwhen-platform,
-    gitea_user.runwhen-machine
+    gitea_org.runwhen-platform
   ]
   program    = ["bash", "${path.module}/scripts/add_to_owners.sh"]
   query = {
@@ -115,6 +113,6 @@ data "external" "add_runwhen_to_runwhen_platform_owners" {
     admin_password  = var.gitea_admin_password
     gitea_url       = var.gitea_base_url != "" ? var.gitea_base_url : "https://${var.gitea_address}"
     org_name        = gitea_org.runwhen-platform.name
-    member_username = gitea_user.runwhen-machine.username
+    member_username = local.runwhen_machine_username
   }
 }
