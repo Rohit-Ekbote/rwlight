@@ -1,7 +1,7 @@
 ## Cluster
 module "vault-config" {
   source = "../../modules/vault"
-  vault_address  = "https://${var.public_https_endpoints.vault.host}"
+  vault_address  = "http://127.0.0.1:8200"
   platform_cluster_name  = var.platform_cluster_name
   github_owner       = "runwhen"
   vault_github_team  =  "nonprod-vault-users"

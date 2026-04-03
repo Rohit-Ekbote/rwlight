@@ -240,17 +240,20 @@ basename              = "local"
 gitea_admin_password  = "${GITEA_ADMIN_PASS}"
 EOF
 
-    ### Port forward to Gitea (needed for Terraform and git push) ###
-    log_info "Setting up port forward to Gitea..."
-    # Kill any existing port-forward on 3000
+    ### Port forwards for Terraform (Gitea + Vault) ###
+    log_info "Setting up port forwards to Gitea and Vault..."
     fuser -k 3000/tcp 2>/dev/null || true
-    kubectl port-forward -n gitea svc/gitea-http 3000:3000 > /tmp/portforward.log 2>&1 &
-    PORT_FORWARD_PID=$!
+    fuser -k 8200/tcp 2>/dev/null || true
+    kubectl port-forward -n gitea svc/gitea-http 3000:3000 > /tmp/portforward-gitea.log 2>&1 &
+    GITEA_PF_PID=$!
+    kubectl port-forward -n vault svc/vault 8200:8200 > /tmp/portforward-vault.log 2>&1 &
+    VAULT_PF_PID=$!
 
-    cleanup_port_forward() {
-        kill $PORT_FORWARD_PID 2>/dev/null || true
+    cleanup_port_forwards() {
+        kill $GITEA_PF_PID 2>/dev/null || true
+        kill $VAULT_PF_PID 2>/dev/null || true
     }
-    trap cleanup_port_forward EXIT
+    trap cleanup_port_forwards EXIT
 
     # Wait for port-forward to be ready
     log_info "Waiting for Gitea port-forward to become ready..."
