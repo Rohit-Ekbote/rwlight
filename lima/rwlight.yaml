@@ -1,10 +1,10 @@
 # Lima VM template for rwlight — lightweight RunWhen platform
 # Usage: limactl create --name=rwlight lima/rwlight.yaml
 
-# Always use AMD64 to match RunWhen container image architecture
+# Use Apple Virtualization.framework with Rosetta for near-native x86_64
+vmType: vz
 arch: x86_64
 
-# Use Rosetta for near-native AMD64 performance on Apple Silicon
 rosetta:
   enabled: true
   binfmt: true
@@ -18,13 +18,13 @@ cpus: 4
 memory: "10GiB"
 disk: "80GiB"
 
-# Mount project directory read-write into the VM
+# Mount project directory read-write using virtiofs (required for vz)
+mountType: virtiofs
 mounts:
   - location: "~"
     writable: true
   - location: "/tmp/lima"
     writable: true
-    # Lima creates this directory if missing
 
 # Forward ingress ports from Mac host to VM
 portForwards:
@@ -42,7 +42,7 @@ provision:
       #!/bin/bash
       set -eux -o pipefail
 
-      # Detect the lima user (defaults to current user in the VM)
+      # Detect the lima user
       LIMA_USER=$(logname 2>/dev/null || echo "${SUDO_USER:-$(whoami)}")
 
       # Install Docker if not present
