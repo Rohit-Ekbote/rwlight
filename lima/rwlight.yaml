@@ -1,17 +1,20 @@
 # Lima VM template for rwlight — lightweight RunWhen platform
 # Usage: limactl create --name=rwlight lima/rwlight.yaml
 
-# Use Apple Virtualization.framework with Rosetta for near-native x86_64
+# Use Apple Virtualization.framework for near-native performance
 vmType: vz
-arch: x86_64
 
-rosetta:
-  enabled: true
-  binfmt: true
+# Rosetta translates x86_64 binaries inside the ARM64 VM
+# This allows AMD64-only container images to run transparently
+vmOpts:
+  vz:
+    rosetta:
+      enabled: true
+      binfmt: true
 
 images:
-  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
-    arch: "x86_64"
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
 
 # Default resources — override via rwlight-vm flags
 cpus: 4
