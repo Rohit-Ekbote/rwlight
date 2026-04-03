@@ -334,10 +334,7 @@ cleanup() {
     log_info "Cleaning up on exit..."
     if [ -n "$TF_DIR" ] && [ -d "$TF_DIR/local/config/" ]; then
         if [[ "$TF_SUCCESS" == "false" ]]; then
-            log_info "cleaning up terraform state vars"
-            cd "$TF_DIR/local/config/"
-            rm -rf .terraform .terraform.lock.hcl terraform.tfstate terraform.tfstate.backup
-            cd ../../../
+            log_info "Terraform state preserved for retry (run install again)"
         fi
     fi
     # Add any cleanup operations here if needed
