@@ -21,12 +21,10 @@ esac
 CHANGED=0
 
 # Install system packages (idempotent via apt)
-if ! command -v curl &>/dev/null || ! command -v jq &>/dev/null || ! command -v rsync &>/dev/null; then
-    echo "[INFO] Installing system packages..."
-    apt-get update -qq
-    apt-get install -y -qq curl git jq unzip wget rsync
-    CHANGED=1
-fi
+# Always ensure all system packages are present
+echo "[INFO] Checking system packages..."
+apt-get update -qq
+apt-get install -y -qq curl git jq unzip wget rsync
 
 # kubectl
 if ! command -v kubectl &>/dev/null; then
