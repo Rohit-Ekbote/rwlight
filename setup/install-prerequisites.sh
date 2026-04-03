@@ -61,6 +61,14 @@ if ! command -v vault &>/dev/null; then
     CHANGED=1
 fi
 
+# k9s
+if ! command -v k9s &>/dev/null; then
+    echo "[INFO] Installing k9s..."
+    K9S_ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
+    curl -fsSL "https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_${K9S_ARCH}.tar.gz" | tar xz -C /usr/local/bin k9s
+    CHANGED=1
+fi
+
 # flux CLI
 if ! command -v flux &>/dev/null; then
     echo "[INFO] Installing flux CLI..."

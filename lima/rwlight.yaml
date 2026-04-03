@@ -58,6 +58,9 @@ provision:
       apt-get update -qq
       apt-get install -y -qq curl git jq
 
+      # Set KUBECONFIG for all shells
+      echo 'export KUBECONFIG=/mnt/k3s-disk/k3s-dev-platform-kubeconfig' > /etc/profile.d/rwlight.sh
+
       echo "Lima VM provisioning complete. Docker and tools installed."
 
 containerd:
