@@ -1,17 +1,12 @@
 terraform {
   required_providers {
-    gitea = {
-      source  = "Lerentis/gitea"
-      version = "~> 0.12.0"
+    external = {
+      source = "hashicorp/external"
+    }
+    random = {
+      source = "hashicorp/random"
     }
   }
-}
-
-provider "gitea" {
-  base_url = var.gitea_base_url != "" ? var.gitea_base_url : "https://${var.gitea_address}"
-  username = var.gitea_admin_username
-  password = var.gitea_admin_password
-  insecure = true
 }
 
 provider "github" {

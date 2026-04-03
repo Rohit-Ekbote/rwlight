@@ -156,6 +156,49 @@ else
     echo "Response: ${ORG_RESPONSE%???}"
 fi
 
+### 8b. Create runwhen-platform organization ###
+PLATFORM_ORG="runwhen-platform"
+echo "🔄 Creating organization '$PLATFORM_ORG'..."
+curl -s -w "%{http_code}" -X POST "http://localhost:3000/api/v1/orgs" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: token $TOKEN" \
+  -d "{\"username\":\"$PLATFORM_ORG\",\"visibility\":\"private\"}" > /dev/null
+echo "✅ Organization '$PLATFORM_ORG' created (or already exists)"
+
+### 8c. Create default org (cluster name) ###
+echo "🔄 Creating organization '${CLUSTER}'..."
+curl -s -w "%{http_code}" -X POST "http://localhost:3000/api/v1/orgs" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: token $TOKEN" \
+  -d "{\"username\":\"${CLUSTER}\",\"visibility\":\"private\"}" > /dev/null
+echo "✅ Organization '${CLUSTER}' created (or already exists)"
+
+### 8d. Create platform repos ###
+for REPO in platform-robot-runtime rw-public-codecollections; do
+  echo "🔄 Creating repository '$PLATFORM_ORG/$REPO'..."
+  curl -s -X POST "http://localhost:3000/api/v1/orgs/$PLATFORM_ORG/repos" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: token $TOKEN" \
+    -d "{\"name\":\"$REPO\",\"private\":true,\"auto_init\":true,\"default_branch\":\"main\"}" > /dev/null
+  echo "✅ Repository '$REPO' created (or already exists)"
+done
+
+### 8e. Add runwhen-machine to org owners ###
+for ORG in "$PLATFORM_ORG" "${CLUSTER}"; do
+  echo "🔄 Adding runwhen-machine to '$ORG' owners..."
+  # Get owners team ID
+  TEAMS=$(curl -s "http://localhost:3000/api/v1/orgs/$ORG/teams" \
+    -H "Authorization: token $TOKEN")
+  OWNERS_TEAM_ID=$(echo "$TEAMS" | jq -r '.[] | select(.name=="Owners") | .id')
+  if [ -n "$OWNERS_TEAM_ID" ] && [ "$OWNERS_TEAM_ID" != "null" ]; then
+    curl -s -X PUT "http://localhost:3000/api/v1/teams/$OWNERS_TEAM_ID/members/runwhen-machine" \
+      -H "Authorization: token $TOKEN" > /dev/null
+    echo "✅ runwhen-machine added to '$ORG' owners"
+  else
+    echo "⚠️  Could not find Owners team for '$ORG'"
+  fi
+done
+
 ### 9. Create repo in Gitea and push from local INFRA_DIR ###
 echo "🔄 Creating repository '$REPO_NAME' in organization '$ORG_NAME'..."
 CREATE_REPO_RESPONSE=$(curl -s -w "%{http_code}" -X POST "http://localhost:3000/api/v1/orgs/$ORG_NAME/repos" \
