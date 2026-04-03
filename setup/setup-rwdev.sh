@@ -240,6 +240,33 @@ basename              = "local"
 gitea_admin_password  = "${GITEA_ADMIN_PASS}"
 EOF
 
+    ### Port forward to Gitea (needed for Terraform and git push) ###
+    log_info "Setting up port forward to Gitea..."
+    # Kill any existing port-forward on 3000
+    fuser -k 3000/tcp 2>/dev/null || true
+    kubectl port-forward -n gitea svc/gitea-http 3000:3000 > /tmp/portforward.log 2>&1 &
+    PORT_FORWARD_PID=$!
+
+    cleanup_port_forward() {
+        kill $PORT_FORWARD_PID 2>/dev/null || true
+    }
+    trap cleanup_port_forward EXIT
+
+    # Wait for port-forward to be ready
+    log_info "Waiting for Gitea port-forward to become ready..."
+    for i in $(seq 1 30); do
+        if curl -s http://localhost:3000/api/healthz > /dev/null; then
+            log_success "Gitea is accessible at localhost:3000"
+            break
+        fi
+        sleep 1
+    done
+
+    if ! curl -s http://localhost:3000/api/healthz > /dev/null; then
+        log_error "Gitea is not accessible via port forward (timeout after 30s)"
+        exit 1
+    fi
+
     log_info "Applying terraform"
     if cd "$TF_DIR/local/config/" && terraform init && terraform plan -out=tfplan && terraform apply -auto-approve tfplan; then
         log_success "Gitea and vault configured"
@@ -249,36 +276,7 @@ EOF
         exit $EXIT_CODE
     fi
 
-    log_info "committing tf state to gitea"
-
-    ### Port forward to Gitea (run in background) ###
-    log_info "🔄 Setting up port forward to Gitea..."
-    kubectl port-forward -n gitea svc/gitea-http 3000:3000 > /tmp/portforward.log 2>&1 &
-    PORT_FORWARD_PID=$!
-
-    # Function to clean up port-forward
-    cleanup_port_forward() {
-        kill $PORT_FORWARD_PID 2>/dev/null
-    }
-    trap cleanup_port_forward EXIT
-
-    # Wait until the port-forward is ready (retry for up to 30s)
-    log_info "🔄 Waiting for Gitea port-forward to become ready..."
-    for i in {1..30}; do
-        if curl -s http://localhost:3000/api/healthz > /dev/null; then
-            log_info "✅ Gitea is accessible!"
-            break
-        fi
-        sleep 1
-    done
-
-    # If loop completed without success
-    if ! curl -s http://localhost:3000/api/healthz > /dev/null; then
-        log_error "❌ Gitea is not accessible via port forward (timeout after 30s)"
-        exit 1
-    fi
-
-    log_info "✅ Gitea is accessible"
+    log_info "Committing tf state to gitea"
 
     # Push updated TF state to Gitea — use a temp clone to avoid git-in-worktree issues
     GITEA_TOKEN=$(kubectl get secret gitea-bootstrap-token --namespace=gitea -o jsonpath='{.data.token}' | base64 -d || true)
