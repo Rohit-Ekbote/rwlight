@@ -75,8 +75,8 @@ spec:
                 --allow-insecure-http=true
 EOF
 
-# Wait for job to complete (timeout after 5m)
-kubectl wait --for=condition=complete --timeout=300s job/flux-bootstrap -n gitea || {
+# Wait for job to complete (timeout after 15m — QEMU emulation is slow)
+kubectl wait --for=condition=complete --timeout=900s job/flux-bootstrap -n gitea || {
   echo "❌ Job failed or timed out"
   kubectl logs job/flux-bootstrap -n gitea
   exit 1

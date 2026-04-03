@@ -74,7 +74,7 @@ helm upgrade --install $GITEA_RELEASE gitea-charts/gitea \
 
 ### 4. Wait for Gitea to be ready ###
 echo "⏳ Waiting for Gitea deployment to be ready..."
-kubectl rollout status deployment/${GITEA_RELEASE} -n $NAMESPACE --timeout=300s
+kubectl rollout status deployment/${GITEA_RELEASE} -n $NAMESPACE --timeout=900s
 
 ### 5. Port forward to Gitea (run in background) ###
 echo "🔄 Setting up port forward to Gitea..."

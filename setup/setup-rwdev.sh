@@ -184,7 +184,7 @@ configure_gitea_vault() {
     until kubectl get pod vault-0 -n vault >/dev/null 2>&1; do sleep 2; done
     
     log_info "Waiting for vault-0 pod to be ready..."
-    if ! kubectl wait --for=condition=Ready pod/vault-0 --timeout=300s -n vault; then
+    if ! kubectl wait --for=condition=Ready pod/vault-0 --timeout=900s -n vault; then
         log_error "vault-0 pod did not become ready in time"
         exit 1
     fi
