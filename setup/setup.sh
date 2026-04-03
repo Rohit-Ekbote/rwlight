@@ -29,6 +29,11 @@ main() {
 
   trap cleanup EXIT
 
+  # Install prerequisites if on Linux (idempotent, skips if already installed)
+  if [ "$(uname -s)" = "Linux" ] && [ -f "$setup_dir/install-prerequisites.sh" ]; then
+    "$setup_dir/install-prerequisites.sh"
+  fi
+
   cd "$setup_dir"
   local env_target="vars.env"
 
