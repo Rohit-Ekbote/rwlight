@@ -1,0 +1,50 @@
+# This is only referenced as envVars in the deployment
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-resource-config
+  namespace: kube-system
+data:
+  config.yaml: |
+    kind: CustomResourceStateMetrics
+    spec:
+      resources:
+        - groupVersionKind:
+            group: "runwhen.com"
+            kind: "Location"
+            version: "v1"
+          metrics:
+            - name: "heartbeat"
+              help: "Latest Heartbeat"
+              each:
+                type: Gauge
+                gauge:
+                  path: [status]
+                  valuesFrom: [heartbeat]
+              labelsFromPath:
+                locationType: [spec, locationType ]
+        - groupVersionKind:
+            group: "kustomize.toolkit.fluxcd.io"
+            kind: "Kustomization"
+            version: "v1beta2"
+          metrics:
+            - name: "kustomization_ready"
+              help: "Kustomization Ready"
+              each:
+                type: StateSet
+                stateSet: 
+                  labelName: status
+                  path: [status, conditions, "[type=Ready]", status]
+                  list: [True, False]
+        # Waiting on https://github.com/kubernetes/kube-state-metrics/pull/1963
+        # - groupVersionKind:
+        #     group: "kustomize.toolkit.fluxcd.io"
+        #     kind: "Kustomization"
+        #     version: "v1beta2"
+        #   metrics:
+        #     - name: "kustomize_ready"
+        #       help: "Kustomize Ready"
+        #       each:
+        #         type: Gauge
+        #         gauge: 
+        #           path: [status, conditions, "[type=Ready]", status]

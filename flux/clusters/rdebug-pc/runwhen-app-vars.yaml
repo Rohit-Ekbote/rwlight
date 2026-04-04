@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: corestate-vars
+  namespace: flux-system
+data:
+  mcr_codecollections: "1"
+  mcr_codecollectionversions: "1"
+  mcr_repositories: "1"
+  mcr_runbooks: "1"
+  mcr_servicelevelindicators: "1"
+  mcr_servicelevelobjectives: "1"
+  mcr_servicelevelx: "1"
+  mcr_tasksets: "1"
+  mcr_workspaces: "1"

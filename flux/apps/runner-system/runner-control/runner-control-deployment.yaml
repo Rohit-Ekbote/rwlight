@@ -1,0 +1,38 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-control
+  labels:
+    app: runner-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: runner-control
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: runner-control
+      labels:
+        app: runner-control
+    spec:
+      serviceAccountName: runner-control
+      containers:
+      - name: runner-control
+        env:
+        - name: EXPLORER_API_BASE_URL
+          value: http://corestate-explorer.corestate.svc
+        - name: VAULT_ADDR
+          value: "http://vault.vault.svc.cluster.local:8200"
+        - name: VAULT_AUTH_MOUNT_POINT
+          value: "kubernetes"
+        image: runner-control:pr-28-4754921
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9090
+          name: metrics
+        - containerPort: 8080
+          name: internal-api
+        - containerPort: 50051
+          name: external-api

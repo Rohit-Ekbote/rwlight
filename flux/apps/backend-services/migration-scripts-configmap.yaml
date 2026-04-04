@@ -1,0 +1,1249 @@
+# prodinfra/backend-services/yamls/base/migration-scripts-cm.yaml
+# Contains both Django and FastAPI migration controller scripts.
+# The StatefulSet command selects which to run based on FRAMEWORK env var.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: migration-scripts
+  namespace: backend-services
+data:
+  # ===========================================================================
+  # Django migration controller (manage.py migrate)
+  # ===========================================================================
+  migration-controller-django.py: |
+    #!/usr/bin/env python3
+    import http.server
+    import socketserver
+    import threading
+    import subprocess
+    import os
+    import json
+    import time
+    import glob
+    import hashlib
+    import sys
+    import signal
+    import socket
+    import logging
+    import queue
+    from datetime import datetime
+
+    # Global variables for shutdown handling
+    shutdown_requested = False
+    http_server = None
+    server_thread = None
+    migration_in_progress = False
+
+    # Performance optimization: Cache migration status to avoid database storms
+    migration_status_cache = {
+        'last_check': 0,
+        'cache_duration': 300,  # Cache for 5 minutes (migrations rarely change)
+        'is_ready': False,
+        'last_hash': None,
+        'last_migrate_check': None,
+        'startup_complete': False  # Track if startup is complete
+    }
+
+    # Setup logging
+    def setup_logging():
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(message)s',  # Remove timestamp from logging format
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+                logging.FileHandler('/tmp/migration-controller.log', mode='a')
+            ]
+        )
+        return logging.getLogger(__name__)
+
+    logger = setup_logging()
+
+    def log_with_timestamp(message, level='info'):
+        """Log message with timestamp and level"""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        log_msg = f"[{timestamp}] {message}"
+        if level == 'error':
+            logger.error(log_msg)
+        elif level == 'warning':
+            logger.warning(log_msg)
+        else:
+            logger.info(log_msg)
+
+    def check_port_available(port):
+        """Check if a port is available to bind to"""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(('', port))
+                return True  # Port is available if we can bind to it
+        except OSError:
+            return False  # Port is in use if we can't bind to it
+        except Exception as e:
+            log_with_timestamp(f"Error checking port {port}: {e}", 'error')
+            return False
+
+    def signal_handler(signum, frame):
+        """Handle shutdown signals gracefully"""
+        global shutdown_requested, http_server, server_thread
+        log_with_timestamp(f"Received signal {signum}, initiating graceful shutdown...", 'warning')
+        shutdown_requested = True
+
+        if http_server:
+            log_with_timestamp("Shutting down HTTP server...", 'info')
+            http_server.shutdown()
+            http_server.server_close()
+
+        if server_thread and server_thread.is_alive():
+            log_with_timestamp("Waiting for server thread to finish...", 'info')
+            server_thread.join(timeout=5)
+
+    def calculate_migration_hash():
+        try:
+            migration_files = glob.glob('/project-468/backend-services/*/migrations/*.py')
+            migration_files.sort()
+
+            content = ''
+            for file_path in migration_files:
+                with open(file_path, 'r') as f:
+                    content += f.read()
+
+            hash_value = hashlib.sha256(content.encode()).hexdigest()[:12]
+            return hash_value
+        except Exception as e:
+            log_with_timestamp(f'Error calculating hash: {e}', 'error')
+            return 'error'
+
+    class MigrationHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, format, *args):
+            # Reduce HTTP logging noise for health checks and status endpoints
+            if not any(x in args[0] for x in ['/ready', '/version', '/status', '/health']):
+                log_with_timestamp(f"HTTP: {format % args}", 'info')
+
+        def do_GET(self):
+            # Get client IP for logging
+            client_ip = self.client_address[0] if self.client_address else 'unknown'
+
+            # Only log non-health-check requests
+            if not any(x in self.path for x in ['/health', '/ready', '/version']):
+                log_with_timestamp(f"HTTP GET {self.path} from {client_ip}", 'info')
+
+            try:
+                if self.path == '/ready':
+                    self.handle_ready()
+                elif self.path == '/version':
+                    self.handle_version()
+                elif self.path == '/status':
+                    self.handle_status()
+                elif self.path == '/health':
+                    self.handle_health()
+                else:
+                    log_with_timestamp(f"404 Not Found: {self.path}", 'warning')
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b'Not found')
+            except (BrokenPipeError, ConnectionResetError):
+                # Client disconnected, ignore - this is normal for health checks
+                pass
+            except Exception as e:
+                log_with_timestamp(f'HTTP handler error for {self.path}: {e}', 'error')
+                try:
+                    self.send_response(500)
+                    self.end_headers()
+                    self.wfile.write(f'Server error: {str(e)}'.encode())
+                except Exception as send_error:
+                    log_with_timestamp(f'Failed to send error response: {send_error}', 'error')
+                    pass
+
+        def handle_ready(self):
+            # If migration is in progress, return a simple response without database checks
+            if migration_in_progress:
+                self.send_response(503)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b'Migration in progress - please wait')
+                return
+
+            # Use cached status to avoid database storms
+            current_time = time.time()
+            cache = migration_status_cache
+
+            # Check if we can use cached result
+            # Only check cache if startup is complete and we have valid cached data
+            if (cache['startup_complete'] and
+                current_time - cache['last_check'] < cache['cache_duration'] and
+                cache['last_hash'] is not None and
+                cache['last_migrate_check'] is not None):
+
+                # Return cached result immediately (no database operations!)
+                if cache['is_ready']:
+                    # Only log cached responses occasionally to avoid spam
+                    if not hasattr(self, '_last_cached_log') or (current_time - getattr(self, '_last_cached_log', 0)) > 300:
+                        log_with_timestamp("⚡ Serving cached ready response (no DB query)", 'info')
+                        self._last_cached_log = current_time
+
+                    try:
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.end_headers()
+                        response = {
+                            'status': 'ready',
+                            'migration_hash': MIGRATION_HASH,
+                            'timestamp': current_time,
+                            'cached': True
+                        }
+                        self.wfile.write(json.dumps(response).encode())
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                else:
+                    try:
+                        self.send_response(503)
+                        self.send_header('Content-Type', 'text/plain')
+                        self.end_headers()
+                        self.wfile.write(b'Not ready (cached)')
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                return
+
+            # Cache expired or startup not complete, do full check
+            log_with_timestamp("🔄 Cache expired or startup not complete, performing full migration check", 'info')
+
+            current_hash = calculate_migration_hash()
+
+            # Add timeout to prevent hanging
+            try:
+                migrate_check = subprocess.run(['python', 'manage.py', 'migrate', '--check'],
+                                             capture_output=True, text=True, cwd='/project-468/backend-services',
+                                             timeout=60)  # 60 second timeout
+            except subprocess.TimeoutExpired:
+                # Update cache with timeout result
+                cache['last_check'] = current_time
+                cache['is_ready'] = False
+                cache['last_hash'] = current_hash
+                cache['last_migrate_check'] = 'timeout'
+
+                self.send_response(503)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b'Migration check timeout')
+                return
+            except Exception as e:
+                # Update cache with error result
+                cache['last_check'] = current_time
+                cache['is_ready'] = False
+                cache['last_hash'] = current_hash
+                cache['last_migrate_check'] = f'error: {str(e)}'
+
+                self.send_response(503)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(f'Migration check error: {str(e)}'.encode())
+                return
+
+            hash_match = current_hash == MIGRATION_HASH
+            migrations_ok = migrate_check.returncode == 0
+            is_ready = hash_match and migrations_ok
+
+            # Update cache with results
+            cache['last_check'] = current_time
+            cache['is_ready'] = is_ready
+            cache['last_hash'] = current_hash
+            cache['last_migrate_check'] = migrate_check.returncode
+            cache['startup_complete'] = True  # Mark startup as complete
+
+            if is_ready:
+                # Only log when we become ready (not on every check)
+                if not hasattr(self, '_was_ready'):
+                    log_with_timestamp("✅ Ready: hash matches and migrations are applied", 'info')
+                    self._was_ready = True
+                response = {
+                    'status': 'ready',
+                    'migration_hash': MIGRATION_HASH,
+                    'timestamp': current_time,
+                    'cached': False
+                }
+                try:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(response).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            else:
+                # Reset ready flag when not ready
+                if hasattr(self, '_was_ready'):
+                    delattr(self, '_was_ready')
+
+                # Only log the reason if it's different from last time
+                if not hasattr(self, '_last_not_ready_reason') or self._last_not_ready_reason != (hash_match, migrations_ok):
+                    log_with_timestamp(f"❌ Not ready: hash_match={hash_match}, migrations_ok={migrations_ok}", 'warning')
+                    self._last_not_ready_reason = (hash_match, migrations_ok)
+
+                try:
+                    self.send_response(503)
+                    self.send_header('Content-Type', 'text/plain')
+                    self.end_headers()
+                    msg = f'Not ready. Hash: {current_hash}=={MIGRATION_HASH}? {hash_match}, Migrate: {migrate_check.returncode}'
+                    self.wfile.write(msg.encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+        def handle_version(self):
+            response = {'migration_hash': MIGRATION_HASH}
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+            except (BrokenPipeError, ConnectionResetError):
+                # Client disconnected, ignore
+                pass
+
+        def handle_health(self):
+            """Lightweight health check endpoint with JSON response"""
+            try:
+                # Check if server thread is alive (very fast operation)
+                server_alive = server_thread and server_thread.is_alive()
+
+                # Return JSON response for proper parsing
+                response = {
+                    'status': 'healthy' if server_alive else 'unhealthy',
+                    'server_thread_alive': server_alive,
+                    'uptime_seconds': time.time() - start_time if 'start_time' in globals() else 0,
+                    'timestamp': time.time()
+                }
+
+                status_code = 200 if server_alive else 503
+                try:
+                    self.send_response(status_code)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(response).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            except Exception as e:
+                try:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'status': 'error', 'error': str(e)}).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+        def handle_status(self):
+            # If migration is in progress, return a simple response without database checks
+            if migration_in_progress:
+                response = {
+                    'status': 'migration_in_progress',
+                    'message': 'Migration is currently running - status checks disabled to prevent interference',
+                    'server_thread_alive': server_thread and server_thread.is_alive(),
+                    'uptime_seconds': time.time() - start_time if 'start_time' in globals() else 0,
+                    'timestamp': time.time()
+                }
+                try:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(response, indent=2).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    # Client disconnected, ignore
+                    pass
+                return
+
+            log_with_timestamp("Handling /status request", 'info')
+            try:
+                current_hash = calculate_migration_hash()
+
+                log_with_timestamp("Running migration status checks", 'info')
+                migrate_check = subprocess.run(['python', 'manage.py', 'migrate', '--check'],
+                                             capture_output=True, text=True, cwd='/project-468/backend-services')
+                showmigrations = subprocess.run(['python', 'manage.py', 'showmigrations'],
+                                              capture_output=True, text=True, cwd='/project-468/backend-services')
+
+                # Check server thread status
+                server_alive = server_thread and server_thread.is_alive()
+
+                response = {
+                    'expected_hash': MIGRATION_HASH,
+                    'current_hash': current_hash,
+                    'hash_match': current_hash == MIGRATION_HASH,
+                    'framework': 'django',
+                    'migrations_applied': migrate_check.returncode == 0,
+                    'migrate_check_stderr': migrate_check.stderr[:500] if migrate_check.stderr else None,
+                    'showmigrations_output': showmigrations.stdout[:1000] if showmigrations.stdout else None,
+                    'server_thread_alive': server_alive,
+                    'uptime_seconds': time.time() - start_time if 'start_time' in globals() else 0,
+                    'timestamp': time.time()
+                }
+
+                try:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(response, indent=2).encode())
+
+                    log_with_timestamp(f"Status check complete: hash_match={response['hash_match']}, migrations_applied={response['migrations_applied']}, server_alive={server_alive}", 'info')
+                except (BrokenPipeError, ConnectionResetError):
+                    # Client disconnected, ignore
+                    pass
+            except Exception as e:
+                log_with_timestamp(f"Status check error: {e}", 'error')
+                try:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': str(e), 'timestamp': time.time()}).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    # Client disconnected, ignore
+                    pass
+
+    def main():
+        global MIGRATION_HASH, http_server, server_thread, shutdown_requested, start_time
+
+        # Record start time for uptime tracking
+        start_time = time.time()
+
+        # Setup signal handlers
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+        log_with_timestamp("=== Migration Controller Starting (Django) ===", 'info')
+
+        # Calculate migration hash
+        MIGRATION_HASH = calculate_migration_hash()
+        log_with_timestamp(f"Migration Hash: {MIGRATION_HASH}", 'info')
+
+        # Set working directory and environment
+        log_with_timestamp("Setting working directory and environment", 'info')
+        os.chdir('/project-468/backend-services')
+        os.environ['DJANGO_SETTINGS_MODULE'] = 'core.settings-migrate'
+
+        # Check if port is available
+        port = 8080
+        if not check_port_available(port):
+            log_with_timestamp(f"❌ Port {port} is already in use! Another instance may be running.", 'error')
+            log_with_timestamp("Checking for existing processes on port 8080...", 'info')
+            try:
+                result = subprocess.run(['lsof', '-i', f':{port}'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    log_with_timestamp(f"Processes using port {port}:\n{result.stdout}", 'warning')
+                else:
+                    log_with_timestamp("No processes found using lsof", 'info')
+            except Exception as e:
+                log_with_timestamp(f"Error checking processes: {e}", 'error')
+
+            log_with_timestamp("Exiting to prevent port conflicts", 'error')
+            sys.exit(1)
+
+        log_with_timestamp(f"✅ Port {port} is available", 'info')
+
+        # Start HTTP server
+        log_with_timestamp(f'Starting HTTP server on :{port}', 'info')
+
+        try:
+            http_server = socketserver.TCPServer(('', port), MigrationHandler)
+            http_server.allow_reuse_address = True
+            server_thread = threading.Thread(target=http_server.serve_forever)
+            server_thread.daemon = True
+            server_thread.start()
+
+            log_with_timestamp('✅ Migration controller HTTP server ready', 'info')
+
+            # One-time migration check and application at startup
+            log_with_timestamp("🔄 Checking for pending migrations at startup...", 'info')
+
+            migration_attempts = 0
+            max_migration_attempts = 3  # Limit attempts for startup
+
+            while migration_attempts < max_migration_attempts and not shutdown_requested:
+                try:
+                    migration_attempts += 1
+                    log_with_timestamp(f"🔄 Migration check attempt {migration_attempts}/{max_migration_attempts}", 'info')
+
+                    # Check for pending migrations
+                    try:
+                        result = subprocess.run(['python', 'manage.py', 'migrate', '--check'],
+                                              capture_output=True, text=True, cwd='/project-468/backend-services',
+                                              timeout=60)  # 60 second timeout
+                    except subprocess.TimeoutExpired:
+                        log_with_timestamp("❌ Migration check timed out after 60 seconds", 'error')
+                        continue
+                    except Exception as e:
+                        log_with_timestamp(f"❌ Migration check failed with exception: {e}", 'error')
+                        continue
+
+                    if result.returncode == 0:
+                        log_with_timestamp('✅ No pending migrations - startup complete', 'info')
+                        break  # Exit the migration loop - we're done!
+                    else:
+                        log_with_timestamp('🔄 Pending migrations detected - applying them...', 'info')
+                        if result.stderr:
+                            # Show which migrations are pending
+                            stderr_lines = result.stderr.split('\n')
+                            for line in stderr_lines:
+                                if 'Your models have changes' in line or 'Run' in line:
+                                    log_with_timestamp(f"  {line.strip()}", 'info')
+
+                        # Set migration in progress flag to prevent health check interference
+                        migration_in_progress = True
+                        log_with_timestamp("🔒 Disabling health checks during migration to prevent interference", 'info')
+
+                        try:
+                            log_with_timestamp("Starting migrate command with 2-hour timeout...", 'info')
+                            migrate_result = subprocess.run(['python', 'manage.py', 'migrate'],
+                                                          capture_output=True, text=True, cwd='/project-468/backend-services',
+                                                          timeout=7200)  # 2 hour timeout
+
+                            log_with_timestamp(f"Migration apply completed with returncode: {migrate_result.returncode}", 'info')
+
+                            # Always reset migration in progress flag
+                            migration_in_progress = False
+                            log_with_timestamp("🔓 Re-enabling health checks after migration", 'info')
+
+                            if migrate_result.returncode == 0:
+                                log_with_timestamp('✅ Migrations applied successfully', 'info')
+
+                                # Invalidate cache since migrations were applied
+                                migration_status_cache['last_check'] = 0  # Force cache refresh
+                                migration_status_cache['startup_complete'] = False  # Reset startup flag
+                                log_with_timestamp("🔄 Cache invalidated - migrations were applied", 'info')
+
+                                # Show what was applied
+                                if migrate_result.stdout:
+                                    stdout_lines = migrate_result.stdout.split('\n')
+                                    applied_count = 0
+                                    for line in stdout_lines:
+                                        if 'Applying' in line:
+                                            log_with_timestamp(f"  {line.strip()}", 'info')
+                                            applied_count += 1
+                                        elif 'OK' in line and 'migrations' in line:
+                                            log_with_timestamp(f"  {line.strip()}", 'info')
+                                    if applied_count == 0:
+                                        log_with_timestamp("  No new migrations were applied", 'info')
+
+                                # Continue to next check to see if more migrations are needed
+                                continue
+                            else:
+                                log_with_timestamp(f'❌ Migration failed with returncode {migrate_result.returncode}', 'error')
+                                if migrate_result.stderr:
+                                    log_with_timestamp(f"Migration stderr (full): {migrate_result.stderr}", 'error')
+                                if migrate_result.stdout:
+                                    log_with_timestamp(f"Migration stdout (full): {migrate_result.stdout}", 'error')
+
+                                # Break on failure - manual intervention needed
+                                log_with_timestamp("❌ Migration failed - manual intervention required", 'error')
+                                break
+                        except subprocess.TimeoutExpired:
+                            log_with_timestamp("❌ Migration apply timed out after 2 hours", 'error')
+                            log_with_timestamp("Migration may be stuck or extremely large", 'error')
+                            break
+                        except Exception as e:
+                            log_with_timestamp(f"❌ Migration apply failed with exception: {e}", 'error')
+                            break
+
+                except Exception as e:
+                    log_with_timestamp(f'Error in migration startup: {e}', 'error')
+                    break
+
+            if migration_attempts >= max_migration_attempts:
+                log_with_timestamp(f"❌ Too many migration attempts ({migration_attempts}), giving up", 'error')
+                log_with_timestamp("This might indicate a database connection issue or migration conflict", 'error')
+
+            log_with_timestamp("🎉 Migration startup process complete - now serving health checks", 'info')
+
+            # Keep the HTTP server running indefinitely for health checks
+            while not shutdown_requested:
+                try:
+                    # Check if server thread is still alive
+                    if not server_thread.is_alive():
+                        log_with_timestamp('❌ HTTP server thread died! Restarting...', 'error')
+                        server_thread = threading.Thread(target=http_server.serve_forever)
+                        server_thread.daemon = True
+                        server_thread.start()
+                        log_with_timestamp('✅ HTTP server thread restarted', 'info')
+
+                    # Just wait for shutdown signal
+                    time.sleep(1)
+
+                except Exception as e:
+                    log_with_timestamp(f'Error in server monitoring loop: {e}', 'error')
+                    if not shutdown_requested:
+                        time.sleep(1)
+
+        except Exception as e:
+            log_with_timestamp(f'Fatal error starting HTTP server: {e}', 'error')
+            sys.exit(1)
+        finally:
+            log_with_timestamp("=== Migration Controller Shutting Down ===", 'info')
+            if http_server:
+                http_server.shutdown()
+                http_server.server_close()
+
+    if __name__ == '__main__':
+        main()
+
+  # ===========================================================================
+  # FastAPI migration controller (Alembic only)
+  # ===========================================================================
+  migration-controller-fastapi.py: |
+    #!/usr/bin/env python3
+    import http.server
+    import socketserver
+    import threading
+    import subprocess
+    import os
+    import json
+    import time
+    import glob
+    import hashlib
+    import sys
+    import signal
+    import socket
+    import logging
+    from datetime import datetime
+
+    # Global variables for shutdown handling
+    shutdown_requested = False
+    http_server = None
+    server_thread = None
+    migration_in_progress = False
+
+    # Performance optimization: Cache migration status to avoid database storms
+    migration_status_cache = {
+        'last_check': 0,
+        'cache_duration': 300,  # Cache for 5 minutes (migrations rarely change)
+        'is_ready': False,
+        'last_hash': None,
+        'last_alembic_check': None,
+        'startup_complete': False  # Track if startup is complete
+    }
+
+    ALEMBIC_PYTHON = '/project-468/backend-services-v2/.venv/bin/python'
+    ALEMBIC_CWD = '/project-468/backend-services-v2'
+
+    # Setup logging
+    def setup_logging():
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(message)s',  # Remove timestamp from logging format
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+                logging.FileHandler('/tmp/migration-controller.log', mode='a')
+            ]
+        )
+        return logging.getLogger(__name__)
+
+    logger = setup_logging()
+
+    def log_with_timestamp(message, level='info'):
+        """Log message with timestamp and level"""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        log_msg = f"[{timestamp}] {message}"
+        if level == 'error':
+            logger.error(log_msg)
+        elif level == 'warning':
+            logger.warning(log_msg)
+        else:
+            logger.info(log_msg)
+
+    def check_port_available(port):
+        """Check if a port is available to bind to"""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(('', port))
+                return True  # Port is available if we can bind to it
+        except OSError:
+            return False  # Port is in use if we can't bind to it
+        except Exception as e:
+            log_with_timestamp(f"Error checking port {port}: {e}", 'error')
+            return False
+
+    def signal_handler(signum, frame):
+        """Handle shutdown signals gracefully"""
+        global shutdown_requested, http_server, server_thread
+        log_with_timestamp(f"Received signal {signum}, initiating graceful shutdown...", 'warning')
+        shutdown_requested = True
+
+        if http_server:
+            log_with_timestamp("Shutting down HTTP server...", 'info')
+            http_server.shutdown()
+            http_server.server_close()
+
+        if server_thread and server_thread.is_alive():
+            log_with_timestamp("Waiting for server thread to finish...", 'info')
+            server_thread.join(timeout=5)
+
+    def get_alembic_env():
+        return {**os.environ, 'PYTHONPATH': ALEMBIC_CWD}
+
+    def run_alembic_command(args, timeout=30):
+        """Run an Alembic command and return the CompletedProcess."""
+        return subprocess.run(
+            [ALEMBIC_PYTHON, '-m', 'alembic'] + args,
+            capture_output=True, text=True,
+            cwd=ALEMBIC_CWD, env=get_alembic_env(),
+            timeout=timeout
+        )
+
+    def check_alembic_at_head():
+        """Return True if Alembic is at head revision."""
+        try:
+            result = run_alembic_command(['current'], timeout=30)
+            return '(head)' in result.stdout
+        except Exception:
+            return False
+
+    def calculate_migration_hash():
+        try:
+            migration_files = glob.glob('/project-468/backend-services-v2/alembic/versions/*.py')
+            migration_files.sort()
+
+            content = ''
+            for file_path in migration_files:
+                with open(file_path, 'r') as f:
+                    content += f.read()
+
+            hash_value = hashlib.sha256(content.encode()).hexdigest()[:12]
+            return hash_value
+        except Exception as e:
+            log_with_timestamp(f'Error calculating hash: {e}', 'error')
+            return 'error'
+
+    class MigrationHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, format, *args):
+            # Reduce HTTP logging noise for health checks and status endpoints
+            if not any(x in args[0] for x in ['/ready', '/version', '/status', '/health']):
+                log_with_timestamp(f"HTTP: {format % args}", 'info')
+
+        def do_GET(self):
+            # Get client IP for logging
+            client_ip = self.client_address[0] if self.client_address else 'unknown'
+
+            # Only log non-health-check requests
+            if not any(x in self.path for x in ['/health', '/ready', '/version']):
+                log_with_timestamp(f"HTTP GET {self.path} from {client_ip}", 'info')
+
+            try:
+                if self.path == '/ready':
+                    self.handle_ready()
+                elif self.path == '/version':
+                    self.handle_version()
+                elif self.path == '/status':
+                    self.handle_status()
+                elif self.path == '/health':
+                    self.handle_health()
+                else:
+                    log_with_timestamp(f"404 Not Found: {self.path}", 'warning')
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b'Not found')
+            except (BrokenPipeError, ConnectionResetError):
+                # Client disconnected, ignore - this is normal for health checks
+                pass
+            except Exception as e:
+                log_with_timestamp(f'HTTP handler error for {self.path}: {e}', 'error')
+                try:
+                    self.send_response(500)
+                    self.end_headers()
+                    self.wfile.write(f'Server error: {str(e)}'.encode())
+                except Exception as send_error:
+                    log_with_timestamp(f'Failed to send error response: {send_error}', 'error')
+                    pass
+
+        def handle_ready(self):
+            # If migration is in progress, return a simple response without database checks
+            if migration_in_progress:
+                self.send_response(503)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b'Migration in progress - please wait')
+                return
+
+            # Use cached status to avoid database storms
+            current_time = time.time()
+            cache = migration_status_cache
+
+            # Check if we can use cached result
+            # Only check cache if startup is complete and we have valid cached data
+            if (cache['startup_complete'] and
+                current_time - cache['last_check'] < cache['cache_duration'] and
+                cache['last_hash'] is not None and
+                cache['last_alembic_check'] is not None):
+
+                # Return cached result immediately (no database operations!)
+                if cache['is_ready']:
+                    # Only log cached responses occasionally to avoid spam
+                    if not hasattr(self, '_last_cached_log') or (current_time - getattr(self, '_last_cached_log', 0)) > 300:
+                        log_with_timestamp("Serving cached ready response (no DB query)", 'info')
+                        self._last_cached_log = current_time
+
+                    try:
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.end_headers()
+                        response = {
+                            'status': 'ready',
+                            'migration_hash': MIGRATION_HASH,
+                            'timestamp': current_time,
+                            'cached': True
+                        }
+                        self.wfile.write(json.dumps(response).encode())
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                else:
+                    try:
+                        self.send_response(503)
+                        self.send_header('Content-Type', 'text/plain')
+                        self.end_headers()
+                        self.wfile.write(b'Not ready (cached)')
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                return
+
+            # Cache expired or startup not complete, do full check
+            log_with_timestamp("Cache expired or startup not complete, performing full migration check", 'info')
+
+            current_hash = calculate_migration_hash()
+            hash_match = current_hash == MIGRATION_HASH
+
+            # Check Alembic is at head
+            alembic_ok = check_alembic_at_head()
+
+            is_ready = hash_match and alembic_ok
+
+            # Update cache with results
+            cache['last_check'] = current_time
+            cache['is_ready'] = is_ready
+            cache['last_hash'] = current_hash
+            cache['last_alembic_check'] = alembic_ok
+            cache['startup_complete'] = True  # Mark startup as complete
+
+            if is_ready:
+                # Only log when we become ready (not on every check)
+                if not hasattr(self, '_was_ready'):
+                    log_with_timestamp("Ready: hash matches and Alembic is at head", 'info')
+                    self._was_ready = True
+                response = {
+                    'status': 'ready',
+                    'migration_hash': MIGRATION_HASH,
+                    'timestamp': current_time,
+                    'cached': False
+                }
+                try:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(response).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            else:
+                # Reset ready flag when not ready
+                if hasattr(self, '_was_ready'):
+                    delattr(self, '_was_ready')
+
+                # Only log the reason if it's different from last time
+                if not hasattr(self, '_last_not_ready_reason') or self._last_not_ready_reason != (hash_match, alembic_ok):
+                    log_with_timestamp(f"Not ready: hash_match={hash_match}, alembic_at_head={alembic_ok}", 'warning')
+                    self._last_not_ready_reason = (hash_match, alembic_ok)
+
+                try:
+                    self.send_response(503)
+                    self.send_header('Content-Type', 'text/plain')
+                    self.end_headers()
+                    msg = f'Not ready. Hash: {current_hash}=={MIGRATION_HASH}? {hash_match}, Alembic at head: {alembic_ok}'
+                    self.wfile.write(msg.encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+        def handle_version(self):
+            response = {'migration_hash': MIGRATION_HASH}
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+            except (BrokenPipeError, ConnectionResetError):
+                # Client disconnected, ignore
+                pass
+
+        def handle_health(self):
+            """Lightweight health check endpoint with JSON response"""
+            try:
+                # Check if server thread is alive (very fast operation)
+                server_alive = server_thread and server_thread.is_alive()
+
+                # Return JSON response for proper parsing
+                response = {
+                    'status': 'healthy' if server_alive else 'unhealthy',
+                    'server_thread_alive': server_alive,
+                    'uptime_seconds': time.time() - start_time if 'start_time' in globals() else 0,
+                    'timestamp': time.time()
+                }
+
+                status_code = 200 if server_alive else 503
+                try:
+                    self.send_response(status_code)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(response).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            except Exception as e:
+                try:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'status': 'error', 'error': str(e)}).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+        def handle_status(self):
+            # If migration is in progress, return a simple response without database checks
+            if migration_in_progress:
+                response = {
+                    'status': 'migration_in_progress',
+                    'message': 'Migration is currently running - status checks disabled to prevent interference',
+                    'server_thread_alive': server_thread and server_thread.is_alive(),
+                    'uptime_seconds': time.time() - start_time if 'start_time' in globals() else 0,
+                    'timestamp': time.time()
+                }
+                try:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(response, indent=2).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    # Client disconnected, ignore
+                    pass
+                return
+
+            log_with_timestamp("Handling /status request", 'info')
+            try:
+                current_hash = calculate_migration_hash()
+
+                log_with_timestamp("Running Alembic status check", 'info')
+
+                # Check Alembic current revision
+                try:
+                    current_rev = run_alembic_command(['current'], timeout=30)
+                    alembic_current = current_rev.stdout.strip()
+                    alembic_at_head = '(head)' in current_rev.stdout
+                except Exception as e:
+                    alembic_current = f'error: {e}'
+                    alembic_at_head = False
+
+                # Get Alembic migration history
+                try:
+                    history = run_alembic_command(['history', '--verbose', '-r', '-5:'], timeout=30)
+                    alembic_history = history.stdout.strip()[:1000] if history.stdout else None
+                except Exception:
+                    alembic_history = None
+
+                # Check server thread status
+                server_alive = server_thread and server_thread.is_alive()
+
+                response = {
+                    'expected_hash': MIGRATION_HASH,
+                    'current_hash': current_hash,
+                    'hash_match': current_hash == MIGRATION_HASH,
+                    'framework': 'fastapi',
+                    'alembic_current': alembic_current,
+                    'alembic_at_head': alembic_at_head,
+                    'alembic_recent_history': alembic_history,
+                    'server_thread_alive': server_alive,
+                    'uptime_seconds': time.time() - start_time if 'start_time' in globals() else 0,
+                    'timestamp': time.time()
+                }
+
+                try:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(response, indent=2).encode())
+
+                    log_with_timestamp(f"Status check complete: hash_match={response['hash_match']}, alembic_at_head={alembic_at_head}, server_alive={server_alive}", 'info')
+                except (BrokenPipeError, ConnectionResetError):
+                    # Client disconnected, ignore
+                    pass
+            except Exception as e:
+                log_with_timestamp(f"Status check error: {e}", 'error')
+                try:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': str(e), 'timestamp': time.time()}).encode())
+                except (BrokenPipeError, ConnectionResetError):
+                    # Client disconnected, ignore
+                    pass
+
+    def main():
+        global MIGRATION_HASH, http_server, server_thread, shutdown_requested, start_time
+
+        # Record start time for uptime tracking
+        start_time = time.time()
+
+        # Setup signal handlers
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+        log_with_timestamp("=== Migration Controller Starting (FastAPI/Alembic) ===", 'info')
+
+        # Calculate migration hash
+        MIGRATION_HASH = calculate_migration_hash()
+        log_with_timestamp(f"Migration Hash: {MIGRATION_HASH}", 'info')
+
+        # Check if port is available
+        port = 8080
+        if not check_port_available(port):
+            log_with_timestamp(f"Port {port} is already in use! Another instance may be running.", 'error')
+            log_with_timestamp("Checking for existing processes on port 8080...", 'info')
+            try:
+                result = subprocess.run(['lsof', '-i', f':{port}'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    log_with_timestamp(f"Processes using port {port}:\n{result.stdout}", 'warning')
+                else:
+                    log_with_timestamp("No processes found using lsof", 'info')
+            except Exception as e:
+                log_with_timestamp(f"Error checking processes: {e}", 'error')
+
+            log_with_timestamp("Exiting to prevent port conflicts", 'error')
+            sys.exit(1)
+
+        log_with_timestamp(f"Port {port} is available", 'info')
+
+        # Start HTTP server
+        log_with_timestamp(f'Starting HTTP server on :{port}', 'info')
+
+        try:
+            http_server = socketserver.TCPServer(('', port), MigrationHandler)
+            http_server.allow_reuse_address = True
+            server_thread = threading.Thread(target=http_server.serve_forever)
+            server_thread.daemon = True
+            server_thread.start()
+
+            log_with_timestamp('Migration controller HTTP server ready', 'info')
+
+            # Run Alembic migrations at startup
+            log_with_timestamp("Running Alembic migrations...", 'info')
+
+            migration_in_progress = True
+            try:
+                result = run_alembic_command(['upgrade', 'head'], timeout=7200)
+                if result.returncode == 0:
+                    log_with_timestamp('Alembic migrations applied successfully', 'info')
+                    if result.stdout:
+                        for line in result.stdout.strip().split('\n'):
+                            log_with_timestamp(f"  {line}", 'info')
+                else:
+                    log_with_timestamp(f'Alembic migration failed (rc={result.returncode})', 'error')
+                    if result.stderr:
+                        log_with_timestamp(f"  stderr: {result.stderr}", 'error')
+                    if result.stdout:
+                        log_with_timestamp(f"  stdout: {result.stdout}", 'error')
+            except subprocess.TimeoutExpired:
+                log_with_timestamp("Alembic migration timed out after 2 hours", 'error')
+            except Exception as e:
+                log_with_timestamp(f"Alembic migration error: {e}", 'error')
+            finally:
+                migration_in_progress = False
+                migration_status_cache['last_check'] = 0  # Invalidate cache
+
+            log_with_timestamp("Migration startup process complete - now serving health checks", 'info')
+
+            # Keep the HTTP server running indefinitely for health checks
+            while not shutdown_requested:
+                try:
+                    # Check if server thread is still alive
+                    if not server_thread.is_alive():
+                        log_with_timestamp('HTTP server thread died! Restarting...', 'error')
+                        server_thread = threading.Thread(target=http_server.serve_forever)
+                        server_thread.daemon = True
+                        server_thread.start()
+                        log_with_timestamp('HTTP server thread restarted', 'info')
+
+                    # Just wait for shutdown signal
+                    time.sleep(1)
+
+                except Exception as e:
+                    log_with_timestamp(f'Error in server monitoring loop: {e}', 'error')
+                    if not shutdown_requested:
+                        time.sleep(1)
+
+        except Exception as e:
+            log_with_timestamp(f'Fatal error starting HTTP server: {e}', 'error')
+            sys.exit(1)
+        finally:
+            log_with_timestamp("=== Migration Controller Shutting Down ===", 'info')
+            if http_server:
+                http_server.shutdown()
+                http_server.server_close()
+
+    if __name__ == '__main__':
+        main()
+
+  # ===========================================================================
+  # Migration hash calculator (FRAMEWORK-aware)
+  # ===========================================================================
+  calculate-migration-hash.py: |
+    #!/usr/bin/env python3
+    import glob
+    import hashlib
+    import os
+    import sys
+
+    try:
+        framework = os.environ.get('FRAMEWORK', 'django')
+        if framework == 'fastapi':
+            migration_files = glob.glob('/project-468/backend-services-v2/alembic/versions/*.py')
+        else:
+            migration_files = glob.glob('/project-468/backend-services/*/migrations/*.py')
+        migration_files.sort()
+
+        content = ''
+        for file_path in migration_files:
+            with open(file_path, 'r') as f:
+                content += f.read()
+
+        print(hashlib.sha256(content.encode()).hexdigest()[:12])
+    except Exception as e:
+        print('error-calculating-hash', file=sys.stderr)
+        sys.exit(1)
+
+  # ===========================================================================
+  # Wait-for-migrations init container script (framework-agnostic)
+  # ===========================================================================
+  wait-for-migrations.sh: |
+    #!/bin/bash
+    set -e
+
+    # Enhanced logging function
+    log_with_timestamp() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S.%3N')] $1"
+    }
+
+    # Calculate our expected migration hash
+    log_with_timestamp "Calculating expected migration hash..."
+    OUR_MIGRATION_HASH=$(python3 /scripts/calculate-migration-hash.py)
+    if [ "$OUR_MIGRATION_HASH" = "error-calculating-hash" ]; then
+        log_with_timestamp "Failed to calculate migration hash"
+        exit 1
+    fi
+
+    TIMEOUT=300  # 5 minutes
+    CONTROLLER_URL="http://migration-controller.backend-services.svc.cluster.local:8080"
+
+    log_with_timestamp "Waiting for migration controller..."
+    log_with_timestamp "Our migration hash: $OUR_MIGRATION_HASH"
+    log_with_timestamp "Controller URL: $CONTROLLER_URL"
+
+    # Function to check migration status
+    check_migration_status() {
+        log_with_timestamp "Checking migration controller status..."
+
+        # First check if controller is reachable via health endpoint
+        HEALTH_RESPONSE=$(curl -s --connect-timeout 5 --max-time 10 "$CONTROLLER_URL/health" 2>/dev/null || echo "{}")
+        if [ -z "$HEALTH_RESPONSE" ] || [ "$HEALTH_RESPONSE" = "{}" ]; then
+            log_with_timestamp "Migration controller not reachable"
+            return 1
+        fi
+
+        # Check if controller is healthy
+        HEALTH_STATUS=$(echo "$HEALTH_RESPONSE" | sed -n 's/.*"status": *"\([^"]*\)".*/\1/p')
+        SERVER_ALIVE=$(echo "$HEALTH_RESPONSE" | sed -n 's/.*"server_thread_alive": *\([^,}]*\).*/\1/p')
+
+        log_with_timestamp "Controller health: $HEALTH_STATUS, server_alive: $SERVER_ALIVE"
+
+        if [ "$HEALTH_STATUS" != "healthy" ] || [ "$SERVER_ALIVE" != "true" ]; then
+            log_with_timestamp "Controller not healthy or server thread not alive"
+            return 1
+        fi
+
+        # Get controller version info
+        CONTROLLER_INFO=$(curl -s --connect-timeout 5 --max-time 10 "$CONTROLLER_URL/version" 2>/dev/null || echo "{}")
+        if [ -z "$CONTROLLER_INFO" ] || [ "$CONTROLLER_INFO" = "{}" ]; then
+            log_with_timestamp "Could not get controller version info"
+            return 1
+        fi
+
+        # Extract controller hash (simple JSON parsing)
+        CONTROLLER_HASH=$(echo "$CONTROLLER_INFO" | sed -n 's/.*"migration_hash": *"\([^"]*\)".*/\1/p')
+
+        log_with_timestamp "Controller hash: $CONTROLLER_HASH"
+
+        # Check version compatibility
+        if [ "$CONTROLLER_HASH" != "$OUR_MIGRATION_HASH" ]; then
+            log_with_timestamp "Migration hash mismatch"
+            log_with_timestamp "   Expected: $OUR_MIGRATION_HASH"
+            log_with_timestamp "   Controller: $CONTROLLER_HASH"
+            log_with_timestamp "   Controller may be restarting with new image..."
+            return 1
+        fi
+
+        # Check if migrations are ready
+        if curl -s --connect-timeout 5 --max-time 10 -f "$CONTROLLER_URL/ready" >/dev/null 2>&1; then
+            log_with_timestamp "Migration controller ready with matching version"
+            return 0
+        else
+            log_with_timestamp "Controller version matches but migrations not ready yet..."
+            return 1
+        fi
+    }
+
+    # Wait loop with exponential backoff
+    elapsed=0
+    attempt=1
+    while [ $elapsed -lt $TIMEOUT ]; do
+        log_with_timestamp "Attempt $attempt (${elapsed}s elapsed)"
+
+        if check_migration_status; then
+            log_with_timestamp "Migration controller is ready!"
+            exit 0
+        fi
+
+        # Exponential backoff: start with 2s, max 10s
+        sleep_time=$((2 * attempt))
+        if [ $sleep_time -gt 10 ]; then
+            sleep_time=10
+        fi
+
+        log_with_timestamp "   Waiting ${sleep_time}s before retry..."
+        sleep $sleep_time
+        elapsed=$((elapsed + sleep_time))
+        attempt=$((attempt + 1))
+    done
+
+    # Timeout reached - provide debugging info
+    log_with_timestamp "Timeout waiting for migration controller ($TIMEOUT seconds)"
+    log_with_timestamp ""
+    log_with_timestamp "Final status check:"
+
+    # Try to get detailed status for debugging
+    if curl -s --connect-timeout 5 --max-time 10 -f "$CONTROLLER_URL/status" >/dev/null 2>&1; then
+        log_with_timestamp "Controller status:"
+        curl -s --connect-timeout 5 --max-time 10 "$CONTROLLER_URL/status" 2>/dev/null | head -20
+    else
+        log_with_timestamp "Could not reach controller status endpoint"
+    fi
+
+    # Try health endpoint
+    log_with_timestamp "Health check:"
+    if curl -s --connect-timeout 5 --max-time 10 -f "$CONTROLLER_URL/health" >/dev/null 2>&1; then
+        curl -s --connect-timeout 5 --max-time 10 "$CONTROLLER_URL/health" 2>/dev/null
+    else
+        log_with_timestamp "Could not reach controller health endpoint"
+    fi
+
+    log_with_timestamp ""
+    log_with_timestamp "Troubleshooting:"
+    log_with_timestamp "   1. Check if migration-controller pod is running:"
+    log_with_timestamp "      kubectl get pods -n backend-services -l app=migration-controller"
+    log_with_timestamp "   2. Check migration-controller logs:"
+    log_with_timestamp "      kubectl logs -n backend-services -l app=migration-controller"
+    log_with_timestamp "   3. Check service connectivity:"
+    log_with_timestamp "      kubectl get svc migration-controller -n backend-services"
+    log_with_timestamp "   4. Test controller directly:"
+    log_with_timestamp "      curl $CONTROLLER_URL/version"
+    log_with_timestamp "      curl $CONTROLLER_URL/health"
+    log_with_timestamp "      curl $CONTROLLER_URL/status"
+
+    exit 1

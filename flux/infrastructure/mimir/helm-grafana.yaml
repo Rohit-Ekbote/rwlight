@@ -1,0 +1,26 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: grafana
+  namespace: mimir
+spec:
+  releaseName: grafana
+  chart:
+    spec:
+      chart: grafana
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: flux-system
+  interval: 5m
+  values: #https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
+    adminUser: runwhen-machine
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+        - name: Mimir
+          type: prometheus
+          url: http://mimir-monolithic.mimir.svc.cluster.local:8080/prometheus
+          access: proxy
+          isDefault: true

@@ -1,0 +1,78 @@
+# This is only referenced as envVars in the deployment
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: corestate-config
+  namespace: corestate
+data:
+  # PLATFORM_ARTIFACTS_GIT_URL: "https://git.${subdomain}.${domain}/runwhen-platform/platform-artifacts"
+  # VAULT_ADDR: "${vault_address}"
+  # VAULT_AUTH_MOUNT_POINT: "kubernetes-${cluster_name}"
+  # VAULT_CORESTATE_CREATE_WORKSPACE_LOCATION_ROLES_ROLE: "corestate-manage-workspaces"
+  # GOOGLE_APPLICATION_CREDENTIALS: "/secrets/gcr-secret.json"
+  # PAPI_HOST: "http://papi.${subdomain}.${domain}"
+  # CORTEX_RULES_URL: 'https://cortex.${subdomain}.${domain}/api/v1/rules'
+
+  # https://app.gitbook.com/o/CVNfFOnVeWdDSO7Zywog/s/WLMJrjy8UP088G1OegLw/application-architecture/corestate/application-configuration
+  config.yaml: |
+    sobow:
+      host: http://sobow-index.backend-services.svc.cluster.local
+      indexURL: http://sobow-index.backend-services.svc.cluster.local
+      searchURL: http://sobow-search.backend-services.svc.cluster.local
+    codeCollections:
+      imageRegistry: us-central1-docker.pkg.dev/runwhen-dev-tiger/public-images
+      objectBucket: codecollectionversion
+    maxConcurrentReconciles:
+      codeCollections: ${mcr_codecollections:=1}
+      codeCollectionVersions: ${mcr_codecollectionversions:=1}
+      repositories: ${mcr_repositories:=1}
+      runbooks: ${mcr_runbooks:=4}
+      serviceLevelIndicators: ${mcr_servicelevelindicators:=1}
+      serviceLevelObjectives: ${mcr_servicelevelobjectives:=1}
+      serviceLevelX: ${mcr_servicelevelx:=4}
+      taskSets: ${mcr_tasksets:=1}
+      workspaces: ${mcr_workspaces:=1}
+    cortex:
+      host: http://mimir-nginx.mimir.svc.cluster.local
+    frontendURL: https://app.${subdomain}.${domain}
+    papi:
+      internalHost: http://papi.backend-services.svc.cluster.local
+      host: https://papi.${subdomain}.${domain}
+    runnerSystem:
+      certificateNamespace: runner-system-certs
+      controlCertificateIssuer: runner-ca-issuer
+      controlCertificateDuration: "8760h0m0s"
+      controlCertificateRenewBefore: "24h0m0s"
+      metricsCertificateIssuer: runner-metrics-ca-issuer
+      metricsCertificateDuration: "8760h0m0s"
+      metricsCertificateRenewBefore: "48h0m0s"
+    robotRuntime:
+      repoURL: http://gitea-http.gitea.svc.cluster.local:3000/runwhen-platform/platform-robot-runtime
+      ref: main
+      username: ""
+      usernamePath: shared/git-service
+      usernameKey: username
+      passwordPath: shared/git-service
+      passwordKey: password
+    sliResources:
+      cpuRequest: "30m"
+      memoryRequest: "64Mi"
+      cpuLimit: "100m"
+      memoryLimit: "256Mi"
+    taskSetMaxRuntime: 600
+    taskSetResources:
+      cpuRequest: "100m"
+      memoryRequest: "64Mi"
+      cpuLimit: "1"
+      memoryLimit: "1024Mi"
+    vault:
+      internalHost: ${vault_address}
+      host: https://vault.${subdomain}.${domain}
+      authMountPoint: kubernetes
+      secretsRole: shared_secrets
+      workspaceRole: corestate-manage-workspaces
+    modelsync:
+      host: http://modelsync.backend-services.svc.cluster.local
+    disableSLIs: true
+    isLocal: true
+    requestCABundle: '"false"'

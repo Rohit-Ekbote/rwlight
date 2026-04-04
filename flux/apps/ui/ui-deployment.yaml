@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ui
+  template:
+    metadata:
+      labels:
+        app: ui
+    spec:
+      serviceAccountName: image-pull-sa
+      containers:
+      - name: ui
+        image: ${artifact_registry_path}ui:main-3f7d791
+        resources:
+          limits:
+            cpu: 250m
+            memory: 512Mi
+          requests:
+            cpu: 50m
+            memory: 128Mi
+        env:
+        - name: API_BASE_URL
+          value: https://papi.${subdomain}.${domain}
+        - name: AGENTFARM_BASE_URL
+          value: https://agentfarm.${subdomain}.${domain}
+        - name: SLACKBOT_BASE_URL
+          value: https://slack.${subdomain}.${domain}
+        ports:
+        - containerPort: 3000

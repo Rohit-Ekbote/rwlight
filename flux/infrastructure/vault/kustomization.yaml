@@ -1,0 +1,9 @@
+namespace: vault
+resources:
+- kms.yaml
+- configmap.yaml
+- vault.yaml
+- service.yaml
+- ingress.yaml
+- roles.yaml
+- secret.yaml

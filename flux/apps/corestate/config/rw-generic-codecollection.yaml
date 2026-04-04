@@ -1,0 +1,14 @@
+apiVersion: runwhen.com/v1
+kind: CodeCollection
+metadata:
+  labels:
+    codecollection: runwhen-generic-collection
+  name: runwhen-generic-collection
+  namespace: corestate
+spec:
+  developmentBranch: main
+  homepage: https://runwhen.com
+  public: true
+  repoURL: https://github.com/runwhen-contrib/rw-generic-codecollection.git
+  stable: {}
+  watchAllBranches: false

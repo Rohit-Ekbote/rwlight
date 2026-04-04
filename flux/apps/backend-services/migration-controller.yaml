@@ -1,0 +1,117 @@
+# prodinfra/backend-services/yamls/base/migration-controller.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: migration-controller
+  namespace: backend-services
+spec:
+  serviceName: migration-controller
+  replicas: 1
+  selector:
+    matchLabels:
+      app: migration-controller
+  template:
+    metadata:
+      labels:
+        app: migration-controller
+    spec:
+      serviceAccountName: papi-sa
+      # affinity:
+      #   nodeAffinity:
+      #     requiredDuringSchedulingIgnoredDuringExecution:
+      #       nodeSelectorTerms:
+      #         - matchExpressions:
+      #             - key: node-type
+      #               operator: In
+      #               values: ["high-cpu"]
+      # tolerations:
+      #   - key: "node-type"
+      #     operator: "Equal"
+      #     value: "high-cpu"
+      #     effect: "NoSchedule"
+      containers:
+      - name: controller
+        image: backend-services
+        ports:
+        - containerPort: 8080
+        workingDir: /project-468/backend-services
+        command: ['sh', '-c', 'python3 /scripts/migration-controller-$${FRAMEWORK:-django}.py']
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: secrets
+          mountPath: /project-468/backend-services/shhh
+        - name: migration-scripts
+          mountPath: /scripts
+        envFrom:
+        - configMapRef:
+            name: papi-env-vars-cm  
+            optional: true
+        env:
+        - name: DJANGO_SETTINGS_MODULE
+          value: core.settings-migrate
+        - name: CACHE_TYPE
+          value: "redis-sentinel"
+        - name: SENTINEL_HOSTS
+          value: "redis-sentinel-headless"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-sentinel
+              key: redis-password
+        - name: DATABASE_ENGINE
+          value: postgresql
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: user
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: password
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: pgbouncer-host
+        - name: DATABASE_PORT
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: pgbouncer-port
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: dbname
+      volumes:
+      - name: secrets
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "vault-papi"
+      - name: migration-scripts
+        configMap:
+          name: migration-scripts
+          defaultMode: 0755  # Make scripts executable
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: migration-controller
+  namespace: backend-services
+spec:
+  selector:
+    app: migration-controller
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP

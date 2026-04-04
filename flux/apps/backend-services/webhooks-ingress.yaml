@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/client-body-buffer-size: 100m
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+  name: webhooks
+  namespace: backend-services
+spec:
+  ingressClassName: "ingress-nginx"
+  rules:
+  - host: webhooks.${subdomain}.${domain}
+    http:
+      paths:
+      - backend:
+          service:
+            name: webhooks
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - webhooks.${subdomain}.${domain}
+    secretName: webhooks-tls

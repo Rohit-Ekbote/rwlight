@@ -1,0 +1,17 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: runner-metrics-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: runner-selfsigned-issuer-metrics-ca
+  secretName: runner-metrics-ca-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: runner-selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io

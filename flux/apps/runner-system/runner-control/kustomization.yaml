@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- runner-control-deployment.yaml
+- runner-control-external-service.yaml
+- runner-control-internal-service.yaml
+- runner-control-ingress.yaml
+- runner-control-namespaced-rbac.yaml
+- runner-control-serviceaccount.yaml
+
+# images:
+# - name: runner-control
+#   newName: us-docker.pkg.dev/runwhen-nonprod-shared/private-platform-images/runner-control
+#   newTag: pr-21-8bc8fa0
+# labels:
+# - includeSelectors: true
+#   pairs:
+#     app: runner-control

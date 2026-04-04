@@ -1,0 +1,61 @@
+# Lima VM template for rwlight — lightweight RunWhen platform
+# Usage: limactl create --name=rwlight lima/rwlight.yaml
+#
+# Uses QEMU to run a full x86_64 VM so all AMD64-only container images
+# work without multi-arch support. Requires lima-additional-guestagents.
+
+arch: x86_64
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    arch: "x86_64"
+
+# Default resources — override via rwlight-vm flags
+cpus: 4
+memory: "10GiB"
+disk: "80GiB"
+
+# Mount project directory read-write
+mounts:
+  - location: "~"
+    writable: true
+  - location: "/tmp/lima"
+    writable: true
+
+# Forward ingress ports from Mac host to VM
+portForwards:
+  - guestPort: 80
+    hostPort: 80
+  - guestPort: 443
+    hostPort: 443
+  - guestPort: 6443
+    hostPort: 6443
+
+# Provision Docker inside the VM (required for k3s setup container)
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+
+      # Detect the lima user
+      LIMA_USER=$(logname 2>/dev/null || echo "${SUDO_USER:-$(whoami)}")
+
+      # Install Docker if not present
+      if ! command -v docker &> /dev/null; then
+        curl -fsSL https://get.docker.com | sh
+        usermod -aG docker "$LIMA_USER"
+      fi
+
+      # Install required tools
+      apt-get update -qq
+      apt-get install -y -qq curl git jq
+
+      # Set KUBECONFIG for all shells
+      echo 'export KUBECONFIG=/mnt/k3s-disk/k3s-dev-platform-kubeconfig' > /etc/profile.d/rwlight.sh
+
+      echo "Lima VM provisioning complete. Docker and tools installed."
+
+containerd:
+  system: false
+  user: false

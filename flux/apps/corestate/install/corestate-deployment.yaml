@@ -1,0 +1,91 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: corestate
+    component: corestate
+    control-plane: controller-manager
+    controller-manager: corestate
+    code-owner: runwhen
+  name: corestate-controller-manager
+  namespace: corestate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: corestate
+      component: corestate
+      control-plane: controller-manager
+      controller-manager: corestate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: corestate-manager
+      labels:
+        app: corestate
+        component: corestate
+        control-plane: controller-manager
+        controller-manager: corestate
+        code-owner: runwhen
+    spec:
+      containers:
+      - args:
+        - --health-probe-bind-address=:8081
+        - --metrics-bind-address=127.0.0.1:8080
+        - --leader-elect
+        env:
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: MY_POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        image: corestate-controller:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: corestate-manager
+        ports:
+        - containerPort: 3232
+          name: http
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 250m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        volumeMounts:
+        - mountPath: /workspace
+          name: config-volume
+        - mountPath: /secrets
+          name: secrets
+      securityContext: {}
+      serviceAccountName: corestate-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - configMap:
+          name: corestate-config
+        name: config-volume
+      - csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: vault-corestate
+        name: secrets

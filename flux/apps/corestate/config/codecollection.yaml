@@ -1,0 +1,16 @@
+# runwhen-collection.yaml
+apiVersion: runwhen.com/v1
+kind: CodeCollection
+metadata:
+  name: runwhen-collection
+  namespace: corestate
+  labels:
+    codecollection: runwhen-collection # Used by corestate as a lookup
+spec:
+  about: RunWhen Public Code Collection
+  developmentBranch: main
+  homepage: https://runwhen.com
+  maintainers: []
+  public: true
+  repoURL: https://github.com/runwhen-contrib/rw-public-codecollection.git
+  watchAllBranches: true

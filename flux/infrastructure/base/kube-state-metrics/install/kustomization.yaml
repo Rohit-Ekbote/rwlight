@@ -1,0 +1,4 @@
+resources: 
+- helm.yaml
+- custom-resources-configmap.yaml
+- crd-helm.yaml

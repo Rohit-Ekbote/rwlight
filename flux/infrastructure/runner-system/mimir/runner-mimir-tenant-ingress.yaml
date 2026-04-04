@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/auth-tls-verify-client: "on"
+    nginx.ingress.kubernetes.io/auth-tls-secret: "cert-manager/runner-metrics-ca-secret"
+    nginx.ingress.kubernetes.io/auth-tls-verify-depth: "1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-SSL-CERT $ssl_client_escaped_cert;
+    external-dns.alpha.kubernetes.io/hostname: runner-mimir-tenant.${subdomain}.${domain}.
+    nginx.ingress.kubernetes.io/client-body-buffer-size: 100m
+  name: runner-mimir-tenant
+  namespace: mimir
+spec:
+  ingressClassName: "ingress-nginx"
+  rules:
+  - host: runner-mimir-tenant.${subdomain}.${domain}
+    http:
+      paths:
+      - backend:
+          service:
+            name: runner-mimir-tenant
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - runner-mimir-tenant.${subdomain}.${domain}
+    secretName: runner-mimir-tenant

@@ -1,0 +1,11 @@
+namespace: ui
+
+resources:
+- namespace.yaml
+- ui-deployment.yaml
+- ui-service.yaml
+- ui-ingress.yaml
+- image-pull-sa.yaml
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization

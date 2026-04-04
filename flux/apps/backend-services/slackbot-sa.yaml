@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: slackbot-sa
+  namespace: backend-services
+  labels:
+    app: slackbot
+imagePullSecrets:
+  - name: gcp-registry-key

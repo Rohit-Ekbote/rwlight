@@ -1,0 +1,16 @@
+namespace: llm-gateway
+resources:
+- namespace.yaml
+- litellm-db-cluster.yaml
+- shared-redis-secret.yaml
+- litellm-proxy-configmap.yaml
+- litellm-proxy-sa.yaml
+- litellm-proxy-csi-secret-class.yaml
+- litellm-proxy-deployment.yaml
+- litellm-proxy-service.yaml
+- litellm-proxy-hpa.yaml
+- litellm-proxy-servicemonitor.yaml
+- image-pull-sa.yaml
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization 

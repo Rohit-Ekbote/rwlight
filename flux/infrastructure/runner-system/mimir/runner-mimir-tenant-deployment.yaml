@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-mimir-tenant
+  namespace: mimir
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: runner-mimir-tenant
+  template:
+    metadata:
+      labels:
+        app: runner-mimir-tenant
+    spec:
+      serviceAccountName: image-pull-sa
+      containers:
+      - name: mimir-tenant
+        # image: us-docker.pkg.dev/runwhen-nonprod-shared/private-platform-images/cortex-tenant:main-c07f3fe4
+        image: ${artifact_registry_path}cortex-tenant:cnvalidator-343f3fc4
+        imagePullPolicy: Always
+        # command: [ "/bin/bash", "-c", "--" ]
+        # args: [ "while true; do sleep 30; done;" ] #Prevent from premature exit
+        env: 
+        - name: CONFIG_PATH
+          value: /data/config/mimir-tenant.yml
+        volumeMounts:
+        - name: config-volume
+          mountPath: /data/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: runner-mimir-tenant-cm

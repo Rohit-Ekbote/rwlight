@@ -1,0 +1,230 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-worker
+  namespace: backend-services
+  labels:
+    app: task-worker
+    code-owner: runwhen
+    codecollection.runwhen.com/app: task-worker
+spec:
+  selector:
+    matchLabels:
+      app: task-worker
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: task-worker
+      labels:
+        app: task-worker
+        code-owner: runwhen
+        codecollection.runwhen.com/app: task-worker
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - task-worker
+              topologyKey: "kubernetes.io/hostname"
+      serviceAccountName: celery-sa
+      initContainers:
+      - name: init-wait-for-core-db
+        image: busybox:1.28
+        env:
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: host
+        command: ['sh', '-c', "until nslookup $DATABASE_HOST; do echo waiting for core db; sleep 2; done"]
+      - name: init-wait-for-migrations
+        image: backend-services  # Same image as main container
+        workingDir: /project-468/backend-services
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        command: ['/scripts/wait-for-migrations.sh']
+        volumeMounts:
+        - name: secrets
+          mountPath: /project-468/backend-services/shhh
+        - name: migration-scripts
+          mountPath: /scripts
+        envFrom:
+        - configMapRef:
+            name: papi-env-vars-cm
+            optional: true
+        env:
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: MY_POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        - name: DJANGO_SETTINGS_MODULE
+          value: core.settings-migrate
+        - name: DATABASE_ENGINE
+          value: postgresql
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: user
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: password
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: pgbouncer-host
+        - name: DATABASE_PORT
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: pgbouncer-port
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: dbname
+        - name: CACHE_TYPE
+          value: "redis-sentinel"
+        - name: SENTINEL_HOSTS
+          value: "redis-sentinel-headless"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-sentinel
+              key: redis-password
+      containers:
+      - name: task-worker
+        image: backend-services   # Rename this
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "/project-468/backend-services/entrypoint.sh", "worker"]
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 50m
+            memory: 256Mi
+        volumeMounts:
+        - name: secrets
+          mountPath: /project-468/backend-services/shhh
+        - name: slackbot-secrets
+          mountPath: /mnt/secrets-store
+        envFrom:
+        - configMapRef:
+            name: papi-env-vars-cm
+            optional: true
+        - configMapRef:
+            name: slackbot-env-vars-cm
+            optional: true
+        env:  #Set a few env vars useful for debugging
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: MY_POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        - name: DJANGO_SETTINGS_MODULE
+          value: "core.settings-worker"
+        - name: CELERY_DEPLOYMENT_TYPE
+          value: "worker"
+        - name: VAULT_ORG_READ_SECRETS_ROLE
+          value: "celery-secrets"
+        - name: TASKIQ_WORKERS
+          value: "2"
+        - name: TASKIQ_MAX_ASYNC_TASKS
+          value: "100"
+        - name: REDIS_HOST
+          value: "redis-sentinel-node-0.redis-sentinel-headless"
+        - name: CACHE_TYPE
+          value: "redis-sentinel"
+        - name: SENTINEL_HOSTS
+          value: "redis-sentinel-headless"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-sentinel
+              key: redis-password
+        - name: DATABASE_ENGINE
+          value: postgresql
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: user
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: password
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: pgbouncer-host
+        - name: DATABASE_PORT
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: pgbouncer-port
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-core
+              key: dbname
+        - name: SLACK_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: slackbot-secrets
+              key: slack_client_id
+        - name: SLACK_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: slackbot-secrets
+              key: slack_client_secret
+        - name: SLACK_SIGNING_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: slackbot-secrets
+              key: slack_signing_secret
+        - name: FERNET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: slackbot-secrets
+              key: fernet_key
+      volumes:
+      - name: secrets
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "vault-papi"
+      - name: slackbot-secrets
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "vault-slackbot"
+      - name: migration-scripts  # Add this volume
+        configMap:
+          name: migration-scripts
+          defaultMode: 0755

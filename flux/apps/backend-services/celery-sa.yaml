@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: celery-sa
+  namespace: backend-services
+imagePullSecrets:
+  - name: gcp-registry-key

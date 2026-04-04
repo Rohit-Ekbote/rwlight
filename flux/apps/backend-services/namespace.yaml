@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backend-services
+  annotations: 
+    linkerd.io/inject: disabled
+    kustomize.toolkit.fluxcd.io/prune: disabled

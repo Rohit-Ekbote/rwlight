@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: worksync-controller
+    control-plane: controller-manager
+    code-owner: runwhen
+  name: worksync-controller
+  namespace: worksync-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worksync-controller
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app: worksync-controller
+        control-plane: controller-manager
+        code-owner: runwhen
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - arm64
+                - ppc64le
+                - s390x
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+      containers:
+      - args:
+        - --health-probe-bind-address=:8081
+        - --metrics-bind-address=127.0.0.1:8080
+        - --leader-elect
+        command:
+        - /manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: KUBESORT_CONFIG_PATH
+          value: /config/kubesort.yaml
+        - name: SOBOW_INDEX_URL
+          value: http://sobow-index.backend-services.svc.cluster.local
+        - name: SOBOW_SEARCH_URL
+          value: http://sobow-search.backend-services.svc.cluster.local
+        - name: MODELSYNC_URL
+          value: http://modelsync.backend-services.svc.cluster.local
+        image: worksync-controller:latest
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 250m
+            memory: 128Mi
+          requests:
+            cpu: 25m
+            memory: 32Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /config
+          name: config-volume
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: worksync-controller
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - configMap:
+          items:
+          - key: kubesort.yaml
+            path: kubesort.yaml
+          name: worksync-controller-config
+        name: config-volume

@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    external-dns.alpha.kubernetes.io/hostname: mimir.${subdomain}.${domain}.
+    nginx.ingress.kubernetes.io/client-body-buffer-size: 100m
+  name: mimir-ingress
+  namespace: mimir
+spec:
+  ingressClassName: "ingress-nginx"
+  rules:
+  - host: mimir.${subdomain}.${domain}
+    http:
+      paths:
+      - backend:
+          service:
+            name: mimir-nginx
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - mimir.${subdomain}.${domain}
+    secretName: mimir-tls

@@ -1,0 +1,10 @@
+.claude/rwenv
+.claude/rwenv-env
+setup/scripts/gcp-key.json
+tf/.vault-token
+tf/local/config/terraform.tfvars
+tf/local/config/tfplan
+tf/local/config/.terraform/
+tf/local/config/.terraform.lock.hcl
+tf/local/config/terraform.tfstate*
+setup/.vault-token

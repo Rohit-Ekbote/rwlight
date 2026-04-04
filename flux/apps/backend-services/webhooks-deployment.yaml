@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: webhooks
+    code-owner: runwhen
+    codecollection.runwhen.com/app: webhooks
+  name: webhooks
+  namespace: backend-services
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webhooks
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: webhooks
+      labels:
+        app: webhooks
+        component: webhooks
+        code-owner: runwhen
+        codecollection.runwhen.com/app: webhooks
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - webhooks
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - env:
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: MY_POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        image: webhooks-service
+        imagePullPolicy: Always
+        # livenessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 8080
+        #   initialDelaySeconds: 15
+        #   periodSeconds: 20
+        name: webhooks
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        # readinessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 8080
+        #   initialDelaySeconds: 5
+        #   periodSeconds: 10
+        resources:
+          limits:
+            cpu: 250m
+            memory: 256Mi
+          requests:
+            cpu: 25m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        volumeMounts:
+        - mountPath: /workspace
+          name: config-volume
+        # - mountPath: /secrets
+        #   name: secrets
+      securityContext: {}
+      serviceAccountName: webhooks-sa
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - configMap:
+          name: webhooks-configmap
+        name: config-volume
+      # - csi:
+      #     driver: secrets-store.csi.k8s.io
+      #     readOnly: true
+      #     volumeAttributes:
+      #       secretProviderClass: vault-papi
+      #   name: secrets

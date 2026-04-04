@@ -1,0 +1,87 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-tenant
+  namespace: mimir
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mimir-tenant
+  template:
+    metadata:
+      labels:
+        app: mimir-tenant
+    spec:
+      serviceAccountName: image-pull-sa
+      containers:
+      - name: mimir-tenant
+        image: ${artifact_registry_path}cortex-tenant:main-c07f3fe4
+        imagePullPolicy: Always
+        # command: [ "/bin/bash", "-c", "--" ]
+        # args: [ "while true; do sleep 30; done;" ] #Prevent from premature exit
+        env: 
+        - name: CONFIG_PATH
+          value: /data/config/mimir-tenant.yml
+        volumeMounts:
+        - name: config-volume
+          mountPath: /data/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: mimir-tenant-cm
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-tenant-cm
+  namespace: mimir
+data:
+  mimir-tenant.yml: |
+    # Where to listen for incoming write requests from Prometheus
+    listen: 0.0.0.0:8080
+    # Profiling API, remove to disable
+    listen_pprof: 0.0.0.0:7008
+    # Where to send the modified requests (Mimir)
+    target: http://mimir-monolithic.mimir.svc.cluster.local:8080/api/v1/push
+    # Log level
+    log_level: debug
+    # HTTP request timeout
+    timeout: 10s
+    # Timeout to wait on shutdown to allow load balancers detect that we're going away.
+    # During this period after the shutdown command the /alive endpoint will reply with HTTP 503.
+    # Set to 0s to disable.
+    timeout_shutdown: 10s
+    # Max number of parallel incoming HTTP requests to handle
+    concurrency: 3
+
+    tenant:
+      # Which label to look for the tenant information
+      label: workspace
+      # Whether to remove the tenant label from the request
+      label_remove: false
+      # To which header to add the tenant ID
+      header: X-Scope-OrgID
+      # Which tenant ID to use if the label is missing in any of the timeseries
+      # If this is not set or empty then the write request with missing tenant label
+      # will be rejected with HTTP code 400
+      default: no-tenant
+      # Enable if you want all metrics from Prometheus to be accepted with a 204 HTTP code
+      # regardless of the response from Mimir. This can lose metrics if Mimir is
+      # throwing rejections.
+      accept_all: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-tenant
+  namespace: mimir
+spec:
+  type: ClusterIP
+  selector:
+    app: mimir-tenant
+  ports:
+  - port: 80
+    targetPort: 8080

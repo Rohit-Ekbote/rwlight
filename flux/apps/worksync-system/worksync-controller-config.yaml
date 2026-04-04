@@ -1,0 +1,18 @@
+apiVersion: v1
+data:
+  kubesort.yaml: |
+    - Workspace
+    - Persona
+    - ServiceLevelX
+    - ServiceLevelIndicator
+    - ServiceLevelObjective
+    - Runbook
+    - TaskSet
+    - Workflow
+    - Tutorial
+kind: ConfigMap
+metadata:
+  labels:
+    app: worksync-controller
+  name: worksync-controller-config
+  namespace: worksync-system

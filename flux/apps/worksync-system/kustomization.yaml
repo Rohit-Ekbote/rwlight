@@ -1,0 +1,15 @@
+namespace: worksync-system
+
+resources:
+- namespace.yaml
+- worksync-crd.yaml
+- worksync-controller-deployment.yaml
+- worksync-controller-config.yaml
+- worksync-controller-sa.yaml
+
+images:
+- name: worksync-controller
+  newName: ${artifact_registry_path}worksync-controller
+  newTag: feat-fastapi_migration-67daa6e
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization

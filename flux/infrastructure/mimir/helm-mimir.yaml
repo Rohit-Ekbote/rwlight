@@ -1,0 +1,156 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: mimir
+  namespace: mimir
+spec:
+  releaseName: mimir
+  chart:
+    spec:
+      version: 5.7.0
+      chart: mimir-distributed # https://artifacthub.io/packages/helm/grafana/mimir-distributed
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: flux-system
+  install:
+    timeout: 20m
+  upgrade:
+    timeout: 20m
+  interval: 5m
+  values:
+    installCRDs: false
+    serviceAccount:
+      create: true
+      name: mimir-sa
+
+    deploymentMode: monolithic
+
+    monolithic:
+      enabled: true
+      replicas: 1
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          cpu: "1"
+          memory: 512Mi
+      extraArgs:
+        log.format: json
+      persistentVolume:
+        enabled: true
+        size: 10Gi
+        storageClass: local-path
+
+    mimir:
+      structuredConfig:
+        server:
+          http_listen_port: 8080
+
+        api:
+          prometheus_http_prefix: "/prometheus"
+
+        multitenancy_enabled: false
+
+        activity_tracker: {}
+        compactor: {}
+
+        # Use common storage configuration - automatically handles prefixes
+        common:
+          storage:
+            backend: s3
+            s3:
+              access_key_id: ${s3_access_key_id}
+              bucket_name: ${mimir_bucket_name}
+              endpoint: ${s3_endpoint}
+              secret_access_key: ${s3_secret_access_key}
+              insecure: true
+
+        alertmanager_storage:
+          storage_prefix: alertmanager
+
+        ruler_storage:
+          storage_prefix: ruler
+
+        ingester:
+          ring:
+            replication_factor: 1
+            kvstore:
+              store: memberlist
+
+        alertmanager:
+          enable_api: true
+          external_url: '/api/prom/alertmanager'
+
+        blocks_storage:
+          storage_prefix: blocks
+          bucket_store:
+            sync_dir: "/data"
+            bucket_index: {}  # Enable bucket index with default settings
+          tsdb:
+            dir: "/data"
+
+        store_gateway:
+          sharding_ring:
+            kvstore:
+              store: memberlist
+
+        ruler:
+          alertmanager_url: http://alerts.backend-services.svc.cluster.local
+          enable_api: true
+
+    memberlist:
+      join_members: []
+
+    # Disable distributed components
+    alertmanager:
+      enabled: false
+
+    compactor:
+      enabled: false
+
+    distributor:
+      enabled: false
+
+    store_gateway:
+      enabled: false
+
+    querier:
+      enabled: false
+
+    query_frontend:
+      enabled: false
+
+    query_scheduler:
+      enabled: false
+
+    ruler:
+      enabled: false
+
+    ingester:
+      enabled: false
+
+    overrides_exporter:
+      enabled: false
+
+    rollout_operator:
+      enabled: false
+
+    chunks-cache:
+      enabled: false
+
+    index-cache:
+      enabled: false
+
+    metadata-cache:
+      enabled: false
+
+    results-cache:
+      enabled: false
+
+    nginx:
+      enabled: false
+
+    minio:
+      enabled: false

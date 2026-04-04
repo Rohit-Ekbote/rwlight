@@ -1,0 +1,113 @@
+FROM alpine:latest
+
+
+ENV RUNDEV_HOME=/home/rundev
+ENV PATH="$PATH:/usr/local/bin:/home/rundev/.local/bin"
+WORKDIR $RUNDEV_HOME
+
+# Add rundev user to sudoers with no password prompt
+RUN adduser -D -u 1000 rundev
+RUN echo "rundev ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+RUN chmod 1777 /tmp
+
+
+# Adjust permissions for rundev user
+#RUN chown rundev:0 -R $RUNDEV_HOME
+
+
+# Install Python and required dependencies
+RUN apk update && apk add --no-cache \
+    sudo \
+    curl \
+    git \
+    vim \
+    python3 \
+    py3-pip \
+    postgresql-client \
+    postgresql-dev \
+    gpg \
+    wget \
+    zsh \
+    gcc \
+    musl-dev \
+    bash \
+    shadow \
+    helm \
+    xclip \
+    xsel \
+    k9s \
+    jq \
+    envsubst \
+    docker-cli \
+    rsync
+    
+
+# Set Python3 as default and create virtual environment
+RUN python -m venv /opt/devenv && \
+    . /opt/devenv/bin/activate && \
+    pip install poetry==1.8.3
+
+# Install k3d
+RUN curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+# Install Vault
+RUN wget -O /tmp/vault.zip https://releases.hashicorp.com/vault/1.15.2/vault_1.15.2_linux_amd64.zip && \
+    unzip /tmp/vault.zip -d /usr/local/bin && \
+    rm /tmp/vault.zip
+
+# Download and install Terraform
+RUN wget https://releases.hashicorp.com/terraform/1.12.2/terraform_1.12.2_linux_amd64.zip \
+&& unzip terraform_1.12.2_linux_amd64.zip \
+&& rm terraform_1.12.2_linux_amd64.zip \
+&& mv terraform /usr/local/bin/terraform
+
+# Set additional environment variables
+ENV KUBECTL_PATH="$RUNDEV_HOME/.config/kubectl"
+ENV KREW_ROOT="$RUNDEV_HOME/.config/krew"
+ENV PATH="$PATH:$KUBECTL_PATH:${KREW_ROOT}/bin:$RUNDEV_HOME/google-cloud-sdk/bin/"
+
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mkdir -p $KUBECTL_PATH && \
+    mv kubectl $KUBECTL_PATH/kubectl
+
+# Install krew
+RUN cd "$(mktemp -d)" && \
+    OS="$(uname | tr '[:upper:]' '[:lower:]')" && \
+    ARCH="$(uname -m | sed -e 's/^arm64$/arm64/' -e 's/^aarch64$/arm64/' -e 's/^x86_64$/amd64/')" && \
+    KREW="krew-${OS}_${ARCH}" && \
+    curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz" && \
+    tar zxvf "${KREW}.tar.gz" && \
+    ./"${KREW}" install krew
+
+RUN echo 'export KREW_ROOT="$KREW_ROOT"' >> $ZDOTDIR/.zshrc && \
+    echo 'export PATH="$PATH:$KUBECTL_PATH:${KREW_ROOT}/bin:$RUNDEV_HOME/google-cloud-sdk/bin/"' >> $ZDOTDIR/.zshrc
+# Install kubectl-ns plugin
+RUN kubectl krew install ns
+
+
+# Install gcloud SDK
+RUN curl -sSL https://sdk.cloud.google.com | bash -s -- --install-dir=/usr/local/gcloud --disable-prompts \
+    && echo "export PATH=/usr/local/gcloud/google-cloud-sdk/bin:\$PATH" >> /etc/profile
+
+# Ensure gcloud is available in PATH
+ENV PATH="/usr/local/gcloud/google-cloud-sdk/bin:${PATH}"
+
+# Install gke-gcloud-auth-plugin
+RUN gcloud components install gke-gcloud-auth-plugin --quiet
+
+
+# Install flux
+RUN curl -fsSL https://fluxcd.io/install.sh | bash -s -- /usr/local/bin
+
+# Install okteto
+RUN curl https://get.okteto.com -sSfL | sh # this line fails with zsh
+
+COPY . $RUNDEV_HOME
+RUN chown -R rundev:rundev $RUNDEV_HOME
+
+# Switch to rundev user
+USER rundev
+
+CMD [ "bash", "setup/setup.sh" ]

@@ -1,0 +1,4 @@
+# https://github.com/CrunchyData/postgres-operator-examples/blob/main/kustomize/install/crd/bases/postgres-operator.crunchydata.com_postgresclusters.yaml
+resources:
+- bases/postgres-operator.crunchydata.com_postgresclusters.yaml
+- bases/postgres-operator.crunchydata.com_pgupgrades.yaml

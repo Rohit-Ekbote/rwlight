@@ -1,0 +1,80 @@
+# prodinfra/backend-services/yamls/base/usearch-migration-controller.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: usearch-migration-controller
+  namespace: backend-services
+spec:
+  serviceName: usearch-migration-controller
+  replicas: 1
+  selector:
+    matchLabels:
+      app: usearch-migration-controller
+  template:
+    metadata:
+      labels:
+        app: usearch-migration-controller
+    spec:
+      serviceAccountName: usearch-sa
+      containers:
+      - name: controller
+        image: usearch:latest
+        ports:
+        - containerPort: 8080
+        command: ['python3', 'usearch_indexer/db/migration_controller.py']
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: "500m"
+            memory: 512Mi
+        envFrom:
+        - configMapRef:
+            name: usearch-env-vars-cm
+            optional: true
+        env:
+        # Database configuration - using pgbouncer via postgres operator secret
+        # The application will construct DATABASE_URL from individual fields
+        - name: DATABASE_ENGINE
+          value: postgresql
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: user
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: password
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: pgbouncer-host
+        - name: DATABASE_PORT
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: pgbouncer-port
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: core-pguser-usearch
+              key: dbname
+        - name: USE_PGBOUNCER
+          value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: usearch-migration-controller
+  namespace: backend-services
+spec:
+  selector:
+    app: usearch-migration-controller
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP

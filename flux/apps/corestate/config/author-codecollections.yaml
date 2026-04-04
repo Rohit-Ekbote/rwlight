@@ -1,0 +1,45 @@
+apiVersion: runwhen.com/v1
+kind: CodeCollection
+metadata:
+  labels:
+    codecollection: ss-cli-collection
+  name: ss-cli-collection
+  namespace: corestate
+spec:
+  developmentBranch: main
+  homepage: https://runwhen.com
+  public: true
+  repoURL: https://github.com/stewartshea/rw-cli-codecollection.git
+  stable: {}
+  watchAllBranches: true
+  robotRuntimeBaseImage: "us-docker.pkg.dev/runwhen-nonprod-shared/public-images/robot-runtime-test-image:44-merge-6b44d91b-amd64"
+---
+apiVersion: runwhen.com/v1
+kind: CodeCollection
+metadata:
+  labels:
+    codecollection: rdebug-rtool-codecollection
+  name: rdebug-rtool-codecollection
+  namespace: corestate
+spec:
+  developmentBranch: main
+  homepage: https://runwhen.com
+  public: true
+  repoURL: https://github.com/Rohit-Ekbote/rdebug-rtool-codecollection.git
+  stable: {}
+  watchAllBranches: true
+---
+apiVersion: runwhen.com/v1
+kind: CodeCollection
+metadata:
+  labels:
+    codecollection: theyashl-rw-codecollection
+  name: theyashl-rw-codecollection
+  namespace: corestate
+spec:
+  developmentBranch: main
+  homepage: https://runwhen.com
+  public: true
+  repoURL: https://github.com/theyashl/theyashl-rw-codecollection
+  stable: {}
+  watchAllBranches: true

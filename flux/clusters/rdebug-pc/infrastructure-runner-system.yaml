@@ -1,0 +1,41 @@
+---
+# Configures Runner System Certificate Issuers
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-runner-system-cert-manager
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infrastructure-cert-manager-config
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/runner-system/cert-manager
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: platform-cluster-cluster-vars
+---
+# Configures Runner System Mimir Tenant Deployment
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-runner-system-mimir
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infrastructure-mimir
+    - name: infrastructure-runner-system-cert-manager
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/runner-system/mimir
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: platform-cluster-cluster-vars

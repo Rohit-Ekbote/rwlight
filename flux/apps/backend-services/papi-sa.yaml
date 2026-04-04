@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: papi-sa
+  namespace: backend-services
+  labels:
+    app: papi
+imagePullSecrets:
+  - name: gcp-registry-key
