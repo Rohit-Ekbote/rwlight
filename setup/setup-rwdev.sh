@@ -89,6 +89,16 @@ setup_platform() {
     # Ensure k3s data directory exists
     sudo mkdir -p /mnt/k3s-disk
 
+    # Tune sysctl for k3s — prevents file descriptor exhaustion under load
+    log_info "Tuning sysctl for k3s..."
+    sudo tee /etc/sysctl.d/99-rwlight.conf > /dev/null <<'SYSCTL_EOF'
+fs.file-max = 1048576
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 1024
+vm.max_map_count = 262144
+SYSCTL_EOF
+    sudo sysctl --system > /dev/null 2>&1
+
     # Create k3s cluster
     log_info "Creating k3s cluster..."
     curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sudo sh -
